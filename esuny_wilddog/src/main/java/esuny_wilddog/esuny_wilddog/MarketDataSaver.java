@@ -22,18 +22,18 @@ public class MarketDataSaver {
 	static String dataFileSuffix;
 	static AtomicInteger dataCount = new AtomicInteger();
 	static volatile boolean requestStop;
-	
+
 	// 写文件 数据缓冲区
 	static File dataDir = new File("data");
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueue = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 	static final Map<String, BufferedWriter> dataWriterMap = new HashMap<String, BufferedWriter>();
-	
+
 	// 写野狗 数据缓冲区
 	static final Map<String, TapAPIQuoteWhole> marketDataMap = new HashMap<String, TapAPIQuoteWhole>();
 
 	// 行情计算 数据缓冲区
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueueCalc = new LinkedBlockingDeque<TapAPIQuoteWhole>();
-	
+
 	private static class SaveThread implements Runnable {
 
 		// @Override
@@ -84,16 +84,14 @@ public class MarketDataSaver {
 			dataWriterMap.clear();
 		}
 	}
-	
 
 	private static class ThreadFuncWilddogWrite implements Runnable {
 		static String urlWilddogSync = "https://wd0980993345vffczg.wilddogio.com";
-		
+
 		// @Override
 		public void run() {
 			// 初始化野狗
-			WilddogOptions options = new WilddogOptions.Builder().setSyncUrl(urlWilddogSync)
-					.build();
+			WilddogOptions options = new WilddogOptions.Builder().setSyncUrl(urlWilddogSync).build();
 			WilddogApp.initializeApp(options);
 			SyncReference ref = WilddogSync.getInstance().getReference();
 
@@ -181,22 +179,23 @@ public class MarketDataSaver {
 	private static class ThreadFuncCalculateQuote implements Runnable {
 		// @Override
 		public void run() {
+			KLineManager klineManager = new KLineManager();
+
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
 				try {
-					quote = marketDataQueue.take();
-					queueLength = marketDataQueue.size();
+					quote = marketDataQueueCalc.take();
+					queueLength = marketDataQueueCalc.size();
 				} catch (InterruptedException e) {
 				}
 				if (quote == null)
 					continue;
-				
-				String contractUID = quote.Contract.Commodity.ExchangeNo + "."
-						+ quote.Contract.Commodity.CommodityNo + quote.Contract.ContractNo1;
+
+				klineManager.UpdateKLine(quote);
 			}
 			System.out.println("Calculate Thread exiting...");
-			
+
 			marketDataQueueCalc.clear();
 		}
 	}
@@ -244,7 +243,8 @@ public class MarketDataSaver {
 		String password = configProps.getProperty("tap.password");
 		String ids[] = configProps.getProperty("marketDataSaver.instrumentIds").split(",");
 
-		System.out.println("Connecting " + quoteHost + ":" + quotePort + " ... ");
+		// QuoteApi
+		System.out.println(" " + quoteHost + ":" + quotePort + " ... ");
 		final QuoteApi mdApi = new QuoteApi(new TapAPIApplicationInfo(authCode, null));
 		mdApi.setListener(new QuoteApiListener() {
 
@@ -301,7 +301,7 @@ public class MarketDataSaver {
 							+ info.Contract.ContractNo1;
 					marketDataMap.put(contractUID, info);
 
-					System.out.println("订阅成功" + contractUID);
+					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice);
 				} catch (InterruptedException e) {
 				}
 			}
@@ -325,15 +325,16 @@ public class MarketDataSaver {
 
 					// 用于计算
 					marketDataQueueCalc.put(info);
-					
-					// System.out.println("行情更新" + contractUID);
+
+					System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice);
 				} catch (InterruptedException e) {
 				}
 			}
 
 		});
 
-		//
+		// Calculator
+
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
 				requestStop = true;
@@ -364,13 +365,13 @@ public class MarketDataSaver {
 
 		// 行情写文件
 		System.out.println("启动线程行情写文件..." + dataDir.getAbsolutePath());
-		System.out.println("主力合约清单: " + ids.length + Arrays.asList(ids));
+		System.out.println("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
 		dataDir.mkdirs();
 		SaveThread saver = new SaveThread();
 		Thread saverThread = new Thread(saver);
 		saverThread.setName("Market data saver thread");
 		saverThread.setDaemon(true);
-//		saverThread.start();
+		// saverThread.start();
 
 		// 行情计算 K线 分时
 		System.out.println("启动线程行情计算...");
@@ -378,7 +379,7 @@ public class MarketDataSaver {
 		Thread calculateThread = new Thread(threadFuncCalculateQuote);
 		calculateThread.setName("Market data calculate thread");
 		calculateThread.setDaemon(true);
-//		calculateThread.start();
+		// calculateThread.start();
 
 		TapAPIQuoteLoginAuth loginAuth = new TapAPIQuoteLoginAuth();
 		loginAuth.UserNo = userId;
@@ -408,7 +409,7 @@ public class MarketDataSaver {
 			System.out.flush();
 		}
 
-		// 订阅行情   合约数量限制50个
+		// 订阅行情 合约数量限制50个
 		for (int i = 0; i < ids.length; i++) {
 			try {
 				String[] parts = ids[i].split("\\.");
