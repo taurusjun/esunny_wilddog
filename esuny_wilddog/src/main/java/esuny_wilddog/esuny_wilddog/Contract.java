@@ -4,16 +4,16 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Map;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.jtap.TapAPIQuoteWhole;
 
 public class Contract {
+	// 品种交易时间信息
+	
+	
 	static final int MAX_CONTRACT_NUM = 50;
 	
 	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
@@ -93,16 +93,23 @@ public class Contract {
 
 		// 分钟K线首次更新 openpx需特别处理
 		if (minklineindex == firstminklineIndex) {
-			if (minkline.OpenPx == 0)
-				minkline.OpenPx = quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice;
+			if (minkline.OpenPx == 0) {
+				minkline.preClosePx = quote.QPreClosingPrice;
+				minkline.OpenPx = quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice;			
+			}		
 		} else if (minklineindex > firstminklineIndex) {
 			if (minkline.OpenPx == 0) {
 				long preminklineindex = getMinKLineIndex(contractUID, quote.DateTimeStamp, -1);
 				KLine preminkline = minklines.get(preminklineindex);
-				if (preminkline == null)
-					minkline.OpenPx = quote.QLastPrice;
+				// TODO 处理行情丢失问题 
+				if (preminkline == null) {
+					minkline.OpenPx = quote.QOpeningPrice;
+					// 补全缺失K线
+					// firstminklineIndex --> preminklineindex
+					// minklines.put(new Long(minklineindex), minkline);
+				}
 				else
-					minkline.OpenPx = preminkline.LastPx > 0 ? preminkline.LastPx : quote.QLastPrice;
+					minkline.OpenPx = preminkline.LastPx > 0 ? preminkline.LastPx : quote.QOpeningPrice;
 			}
 		} else if (minklineindex < firstminklineIndex) {
 			System.out.println(
@@ -134,7 +141,7 @@ public class Contract {
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
-
+		
 	}
 
 }

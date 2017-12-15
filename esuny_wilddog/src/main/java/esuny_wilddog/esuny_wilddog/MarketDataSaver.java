@@ -36,7 +36,7 @@ public class MarketDataSaver {
 
 	// 合约集合
 	static final Map<String, Contract> contractsMap = new HashMap<String, Contract>(Contract.MAX_CONTRACT_NUM);
-	
+
 	private static class SaveThread implements Runnable {
 
 		// @Override
@@ -53,10 +53,9 @@ public class MarketDataSaver {
 				if (quote == null)
 					continue;
 				try {
-					String contractUID = quote.Contract.Commodity.ExchangeNo 
-							+ "." + quote.Contract.Commodity.CommodityNo 
-							+ "." + quote.Contract.ContractNo1;
-					
+					String contractUID = quote.Contract.Commodity.ExchangeNo + "."
+							+ quote.Contract.Commodity.CommodityNo + "." + quote.Contract.ContractNo1;
+
 					BufferedWriter writer = dataWriterMap.get(contractUID);
 					if (writer == null) {
 						writer = new BufferedWriter(new OutputStreamWriter(
@@ -71,12 +70,12 @@ public class MarketDataSaver {
 							.append(quote.Contract.Commodity.CommodityNo + quote.Contract.ContractNo1).append(",")
 							.append(quote.QTotalQty).append(",").append(quote.QLastQty).append(",")
 							.append(price2str(quote.QLastPrice)).append("\n");
-					
-					// TODO writer 
-//					writer.write(line.toString());
+
+					// TODO writer
+					// writer.write(line.toString());
 					if (queueLength < 100)
 						writer.flush();
-					
+
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -105,9 +104,9 @@ public class MarketDataSaver {
 
 			Map<String, Object> rootMap = new HashMap<String, Object>();
 			while (!requestStop) {
-				// sleep 0.5s
+				// sleep 200ms
 				try {
-					Thread.sleep(500);
+					Thread.sleep(200);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -143,6 +142,7 @@ public class MarketDataSaver {
 					childrenMap.put("QClosingPrice", price2str(info.QClosingPrice)); /// < 收盘价
 					childrenMap.put("QSettlePrice", price2str(info.QSettlePrice)); /// < 结算价
 					childrenMap.put("QLastQty", qty2str(info.QLastQty)); /// < 最新成交量
+					
 					childrenMap.put("QBidPrice", info.QBidPrice[0]); /// < 买价1-20档
 					childrenMap.put("QBidQty", info.QBidQty[0]); /// < 买量1-20档
 					childrenMap.put("QAskPrice", info.QAskPrice[0]); /// < 卖价1-20档
@@ -151,6 +151,7 @@ public class MarketDataSaver {
 					// childrenMap.put("QBidQty[20]",info.QBidQty[20]); ///< 买量1-20档
 					// childrenMap.put("QAskPrice[20]",info.QAskPrice[20]); ///< 卖价1-20档
 					// childrenMap.put("QAskQty[20]",info.QAskQty[20]); ///< 卖量1-20档
+					
 					childrenMap.put("QImpliedBidPrice", price2str(info.QImpliedBidPrice)); /// < 隐含买价
 					childrenMap.put("QImpliedBidQty", qty2str(info.QImpliedBidQty)); /// < 隐含买量
 					childrenMap.put("QImpliedAskPrice", price2str(info.QImpliedAskPrice)); /// < 隐含卖价
@@ -187,7 +188,7 @@ public class MarketDataSaver {
 	private static class ThreadFuncCalculateQuote implements Runnable {
 		// @Override
 		public void run() {
-			
+
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
@@ -199,18 +200,17 @@ public class MarketDataSaver {
 				if (quote == null)
 					continue;
 
-				String contractUID = quote.Contract.Commodity.ExchangeNo 
-						+ "." + quote.Contract.Commodity.CommodityNo 
+				String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo
 						+ "." + quote.Contract.ContractNo1;
-				
+
 				Contract c = contractsMap.get(contractUID);
-				if(c==null) {
-					c=new Contract(contractUID);
+				if (c == null) {
+					c = new Contract(contractUID);
 					contractsMap.put(contractUID, c);
 				}
 				c.UpdateQuote(quote);
 			}
-			
+
 			System.out.println("Calculate Thread exiting...");
 
 			marketDataQueueCalc.clear();
@@ -264,7 +264,7 @@ public class MarketDataSaver {
 		for (int i = 0; i < ids.length; i++) {
 			contractsMap.put(ids[i], new Contract(ids[i]));
 		}
-		
+
 		// QuoteApi
 		System.out.println(" " + quoteHost + ":" + quotePort + " ... ");
 		final QuoteApi mdApi = new QuoteApi(new TapAPIApplicationInfo(authCode, null));
@@ -316,16 +316,14 @@ public class MarketDataSaver {
 					marketDataQueue.put(info);
 					// 用于计算
 					marketDataQueueCalc.put(info);
-					
+
 					// 用于写野狗 行情分拣
-					String contractUID = info.Contract.Commodity.ExchangeNo 
-							+ "." + info.Contract.Commodity.CommodityNo
+					String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
 							+ "." + info.Contract.ContractNo1;
-					marketDataMap.put(contractUID, info);				
-					
-					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp 
-							+ " " + info.QLastPrice
-							+ " " + info.QLastQty);
+					marketDataMap.put(contractUID, info);
+
+					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice + " "
+							+ info.QLastQty);
 				} catch (InterruptedException e) {
 				}
 			}
@@ -343,16 +341,15 @@ public class MarketDataSaver {
 					marketDataQueue.put(info);
 					// 用于计算
 					marketDataQueueCalc.put(info);
-					
+
 					// 用于写野狗 行情分拣
-					String contractUID = info.Contract.Commodity.ExchangeNo 
-							+ "." + info.Contract.Commodity.CommodityNo
+					String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
 							+ "." + info.Contract.ContractNo1;
 					marketDataMap.put(contractUID, info);
 
-//					System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp 
-//							+ " " + info.QLastPrice
-//							+ " " + info.QLastQty);
+					// System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp
+					// + " " + info.QLastPrice
+					// + " " + info.QLastQty);
 				} catch (InterruptedException e) {
 				}
 			}
@@ -398,7 +395,7 @@ public class MarketDataSaver {
 		Thread saverThread = new Thread(saver);
 		saverThread.setName("Market data saver thread");
 		saverThread.setDaemon(true);
-	    saverThread.start();
+		saverThread.start();
 
 		// 行情计算 K线 分时
 		System.out.println("启动线程行情计算...");
@@ -488,7 +485,7 @@ public class MarketDataSaver {
 
 		mdApi.Close();
 		/**/
-		System.out.println(dateFormat.format(date)+" EXIT");
+		System.out.println(dateFormat.format(date) + " EXIT");
 	}
 
 	// 配置文件
