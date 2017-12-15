@@ -1,13 +1,15 @@
 package esuny_wilddog.esuny_wilddog;
 
 public class KLine {
+	static final int KLINECAPACITY = 60 * 24;
+	
 	public long index;
 	public double preClosePx;
 	public double OpenPx;
 	public double HighPx;
 	public double LowPx;
 	public double LastPx;
-	public double Volume;
+	public long Volume;
 	public double Value;
 
 	KLine() {

@@ -23,17 +23,20 @@ public class MarketDataSaver {
 	static AtomicInteger dataCount = new AtomicInteger();
 	static volatile boolean requestStop;
 
-	// 写文件 数据缓冲区
 	static File dataDir = new File("data");
-	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueue = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 	static final Map<String, BufferedWriter> dataWriterMap = new HashMap<String, BufferedWriter>();
-
-	// 写野狗 数据缓冲区
-	static final Map<String, TapAPIQuoteWhole> marketDataMap = new HashMap<String, TapAPIQuoteWhole>();
+	// 写文件 数据缓冲区
+	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueue = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 
 	// 行情计算 数据缓冲区
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueueCalc = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 
+	// 写野狗 数据缓冲区
+	static final Map<String, TapAPIQuoteWhole> marketDataMap = new HashMap<String, TapAPIQuoteWhole>();
+
+	// 合约集合
+	static final Map<String, Contract> contractsMap = new HashMap<String, Contract>(Contract.MAX_CONTRACT_NUM);
+	
 	private static class SaveThread implements Runnable {
 
 		// @Override
@@ -50,8 +53,10 @@ public class MarketDataSaver {
 				if (quote == null)
 					continue;
 				try {
-					String contractUID = quote.Contract.Commodity.ExchangeNo + "."
-							+ quote.Contract.Commodity.CommodityNo + quote.Contract.ContractNo1;
+					String contractUID = quote.Contract.Commodity.ExchangeNo 
+							+ "." + quote.Contract.Commodity.CommodityNo 
+							+ "." + quote.Contract.ContractNo1;
+					
 					BufferedWriter writer = dataWriterMap.get(contractUID);
 					if (writer == null) {
 						writer = new BufferedWriter(new OutputStreamWriter(
@@ -66,9 +71,12 @@ public class MarketDataSaver {
 							.append(quote.Contract.Commodity.CommodityNo + quote.Contract.ContractNo1).append(",")
 							.append(quote.QTotalQty).append(",").append(quote.QLastQty).append(",")
 							.append(price2str(quote.QLastPrice)).append("\n");
-					writer.write(line.toString());
+					
+					// TODO writer 
+//					writer.write(line.toString());
 					if (queueLength < 100)
 						writer.flush();
+					
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -179,8 +187,7 @@ public class MarketDataSaver {
 	private static class ThreadFuncCalculateQuote implements Runnable {
 		// @Override
 		public void run() {
-			KLineManager klineManager = new KLineManager();
-
+			
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
@@ -192,8 +199,18 @@ public class MarketDataSaver {
 				if (quote == null)
 					continue;
 
-				klineManager.UpdateKLine(quote);
+				String contractUID = quote.Contract.Commodity.ExchangeNo 
+						+ "." + quote.Contract.Commodity.CommodityNo 
+						+ "." + quote.Contract.ContractNo1;
+				
+				Contract c = contractsMap.get(contractUID);
+				if(c==null) {
+					c=new Contract(contractUID);
+					contractsMap.put(contractUID, c);
+				}
+				c.UpdateQuote(quote);
 			}
+			
 			System.out.println("Calculate Thread exiting...");
 
 			marketDataQueueCalc.clear();
@@ -243,6 +260,11 @@ public class MarketDataSaver {
 		String password = configProps.getProperty("tap.password");
 		String ids[] = configProps.getProperty("marketDataSaver.instrumentIds").split(",");
 
+		// 初始化分钟K线集合
+		for (int i = 0; i < ids.length; i++) {
+			contractsMap.put(ids[i], new Contract(ids[i]));
+		}
+		
 		// QuoteApi
 		System.out.println(" " + quoteHost + ":" + quotePort + " ... ");
 		final QuoteApi mdApi = new QuoteApi(new TapAPIApplicationInfo(authCode, null));
@@ -268,40 +290,42 @@ public class MarketDataSaver {
 
 			// @Override
 			public void OnRspChangePassword(int sessionID, int errorCode) {
-
+				System.out.println("OnRspChangePassword session " + sessionID + " errorCode" + errorCode);
 			}
 
 			// @Override
 			public void OnRspQryCommodity(int sessionID, int errorCode, byte isLast, TapAPIQuoteCommodityInfo info) {
-				// System.out.println("OnRspQryCommodity session "+sessionID+" error
-				// "+errorCode+" "+info);
+				System.out.println("OnRspQryCommodity session " + sessionID + " errorCode" + errorCode + " " + info);
 			}
 
 			// @Override
 			public void OnRspQryContract(int sessionID, int errorCode, byte isLast, TapAPIQuoteContractInfo info) {
-				// System.out.println("OnRspQryContract session "+sessionID+" error
-				// "+errorCode+" "+info);
-
+				System.out.println("OnRspQryContract session " + sessionID + " errorCode" + errorCode + " " + info);
 			}
 
 			// @Override
 			public void OnRtnContract(TapAPIQuoteContractInfo info) {
-				// TODO Auto-generated method stub
-
+				System.out.println("OnRtnContract session " + info);
 			}
 
 			// @Override
 			public void OnRspSubscribeQuote(int sessionID, int errorCode, byte isLast, TapAPIQuoteWhole info) {
 				dataCount.incrementAndGet();
 				try {
-
+					// 用于写文件
 					marketDataQueue.put(info);
-
-					String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
-							+ info.Contract.ContractNo1;
-					marketDataMap.put(contractUID, info);
-
-					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice);
+					// 用于计算
+					marketDataQueueCalc.put(info);
+					
+					// 用于写野狗 行情分拣
+					String contractUID = info.Contract.Commodity.ExchangeNo 
+							+ "." + info.Contract.Commodity.CommodityNo
+							+ "." + info.Contract.ContractNo1;
+					marketDataMap.put(contractUID, info);				
+					
+					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp 
+							+ " " + info.QLastPrice
+							+ " " + info.QLastQty);
 				} catch (InterruptedException e) {
 				}
 			}
@@ -317,24 +341,25 @@ public class MarketDataSaver {
 				try {
 					// 用于写文件
 					marketDataQueue.put(info);
-
-					// 用于写野狗
-					String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
-							+ info.Contract.ContractNo1;
-					marketDataMap.put(contractUID, info);
-
 					// 用于计算
 					marketDataQueueCalc.put(info);
+					
+					// 用于写野狗 行情分拣
+					String contractUID = info.Contract.Commodity.ExchangeNo 
+							+ "." + info.Contract.Commodity.CommodityNo
+							+ "." + info.Contract.ContractNo1;
+					marketDataMap.put(contractUID, info);
 
-					System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice);
+//					System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp 
+//							+ " " + info.QLastPrice
+//							+ " " + info.QLastQty);
 				} catch (InterruptedException e) {
 				}
 			}
 
 		});
 
-		// Calculator
-
+		// ShutdownHook
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
 				requestStop = true;
@@ -352,6 +377,8 @@ public class MarketDataSaver {
 					} catch (Exception e) {
 					}
 				}
+
+				System.out.println("ShutdownHook");
 			}
 		});
 
@@ -371,7 +398,7 @@ public class MarketDataSaver {
 		Thread saverThread = new Thread(saver);
 		saverThread.setName("Market data saver thread");
 		saverThread.setDaemon(true);
-		// saverThread.start();
+	    saverThread.start();
 
 		// 行情计算 K线 分时
 		System.out.println("启动线程行情计算...");
@@ -379,8 +406,9 @@ public class MarketDataSaver {
 		Thread calculateThread = new Thread(threadFuncCalculateQuote);
 		calculateThread.setName("Market data calculate thread");
 		calculateThread.setDaemon(true);
-		// calculateThread.start();
+		calculateThread.start();
 
+		// ES quoteapi login
 		TapAPIQuoteLoginAuth loginAuth = new TapAPIQuoteLoginAuth();
 		loginAuth.UserNo = userId;
 		loginAuth.Password = password;
@@ -390,7 +418,7 @@ public class MarketDataSaver {
 
 		{
 			// 查询服务器支持的品种
-			System.out.println("Query commodity ...");
+			System.out.println("查询服务器支持的品种 Query commodity ...");
 			TapAPIQuoteCommodityInfo[] infos = mdApi.SyncAllQryCommodity();
 			for (int i = 0; i < infos.length; i++) {
 				TapAPIQuoteCommodityInfo info = infos[i];
@@ -398,6 +426,7 @@ public class MarketDataSaver {
 				builder.append("Commodity " + info.Commodity.CommodityNo);
 				if (info.CommodityName != null) {
 					builder.append(" name ");
+					builder.append(info.CommodityName);
 					if (info.CommodityEngName != null) {
 						builder.append(info.CommodityEngName).append('/');
 					}
@@ -409,7 +438,7 @@ public class MarketDataSaver {
 			System.out.flush();
 		}
 
-		// 订阅行情 合约数量限制50个
+		// 订阅行情 api数量限制50个合约
 		for (int i = 0; i < ids.length; i++) {
 			try {
 				String[] parts = ids[i].split("\\.");
@@ -459,8 +488,10 @@ public class MarketDataSaver {
 
 		mdApi.Close();
 		/**/
+		System.out.println(dateFormat.format(date)+" EXIT");
 	}
 
+	// 配置文件
 	private static Properties loadConfig() throws IOException {
 		Properties configProps = new Properties();
 		InputStream is = ClassLoader.getSystemResourceAsStream("config.properties");
