@@ -4,26 +4,104 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.TimeZone;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.jtap.TapAPIQuoteWhole;
 
 public class Contract {
-	// 品种交易时间信息
+	// 合约名称 NYMEX.CL.1801
+	String contractUID;
 	
+	// 全部品种交易时间信息
+	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime= new HashMap<String, ArrayList<LocalTime>>();
+	static void Init() {
+		 ArrayList<LocalTime> array = new ArrayList<LocalTime>();
+		Boolean isDST = true;
+		// 美原油 天然气 黄金 白银
+		// 夏令电子盘 06:00-05:00
+		// 冬令电子盘 07:00-06:00
+		if (isDST) {
+			array.add(LocalTime.of(06, 00, 00));
+			array.add(LocalTime.MAX);
+			array.add(LocalTime.MIDNIGHT);
+			array.add(LocalTime.of(05, 00, 00));
+		} else {
+			array.add(LocalTime.of(07, 00, 00));
+			array.add(LocalTime.MAX);
+			array.add(LocalTime.MIDNIGHT);
+			array.add(LocalTime.of(06, 00, 00));
+		}
+		commodityTradeTime.put("NYMEX.CL", array);
+		commodityTradeTime.put("NYMEX.NG", array);
+		commodityTradeTime.put("NYMEX.GC", array);
+		commodityTradeTime.put("NYMEX.SI", array);
+		
+		// 德指
+		// 夏令电子盘 13:50-04:00*
+		// 冬令电子盘 14:50-05:00
+		array.clear();
+		if (isDST) {
+			array.add(LocalTime.of(13, 50, 00));
+			array.add(LocalTime.MAX);
+			array.add(LocalTime.MIDNIGHT);
+			array.add(LocalTime.of(04, 00, 00));
+		} else {
+			array.add(LocalTime.of(14, 50, 00));
+			array.add(LocalTime.MAX);
+			array.add(LocalTime.MIDNIGHT);
+			array.add(LocalTime.of(05, 00, 00));
+		}
+		commodityTradeTime.put("EUREX.DAX", array);
+		
+		// 大恒指 小恒指
+		// 09:15-12:00; 13:00-16:30
+		// (T+1)17:15-01:00
+		array.clear();
+		array.add(LocalTime.of(17, 15, 00));
+		array.add(LocalTime.MAX);
+		array.add(LocalTime.MIDNIGHT);
+		array.add(LocalTime.of(01, 00, 00));
+		array.add(LocalTime.of(9, 15, 00));
+		array.add(LocalTime.of(16, 30, 00));
+		commodityTradeTime.put("HKEX.HSI", array);
+		commodityTradeTime.put("HKEX.MHI", array);
+			
+		// A50
+		// 09:00-16:35;
+		// (T+1)17:00-04:45
+		array.clear();
+		array.add(LocalTime.of(17, 00, 00));
+		array.add(LocalTime.MAX);
+		array.add(LocalTime.MIDNIGHT);
+		array.add(LocalTime.of(04, 45, 00));
+		array.add(LocalTime.of(9, 00, 00));
+		array.add(LocalTime.of(16, 35, 00));
+		commodityTradeTime.put("SGX.CN", array);
+	}
+	// 交易时间段
+	private ArrayList<LocalTime> tradeTimeArray = new ArrayList<LocalTime>();
 	
 	static final int MAX_CONTRACT_NUM = 50;
 	
 	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
 	
+	// 保存上一笔行情,计算逐笔成交
 	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
 	
+	
+	// 全天分钟K线 分时线 
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
 
-	String contractUID;
+
+	
 	Contract(String contractUID){
 		this.contractUID = contractUID;
 	}
@@ -142,7 +220,15 @@ public class Contract {
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
-		LocalDate today = LocalDate.now(); System.out.println("Today's Local date : " + today);
+		LocalDate today = LocalDate.now();
+		logger.debug("Today's Local date : " + today);
+		
+		// 判断是否夏令时
+		logger.debug("inDaylightTime:"+TimeZone.getDefault().inDaylightTime( new Date() ));
+		
+		TimeZone tz = TimeZone.getTimeZone("EST");
+		boolean inDs = tz.inDaylightTime(new Date());
+		logger.debug("inDaylightTime:"+inDs);
 	}
 
 }
