@@ -40,6 +40,21 @@
 		<version>1.0.13</version>
 	</dependency>
 
+
+	<!-- https://mvnrepository.com/artifact/org.mongodb/mongo-java-driver -->
+	<dependency>
+		<groupId>org.mongodb</groupId>
+		<artifactId>mongo-java-driver</artifactId>
+		<version>3.6.0</version>
+	</dependency>
+
+<!-- 
+	<dependency>
+		<groupId>com.ydzq</groupId>
+		<artifactId>ydzq-core</artifactId>
+		<version>${project.version}</version>
+	</dependency>
+ -->	
+ 
   </dependencies>
-  
 </project>

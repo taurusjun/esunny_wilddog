@@ -17,14 +17,16 @@ import org.slf4j.LoggerFactory;
 import net.jtap.TapAPIQuoteWhole;
 
 public class Contract {
+	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
+	
 	// 合约名称 NYMEX.CL.1801
 	String contractUID;
 	
 	// 全部品种交易时间信息
 	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime= new HashMap<String, ArrayList<LocalTime>>();
-	static void Init() {
+	static void InitTradeTime() {
 		 ArrayList<LocalTime> array = new ArrayList<LocalTime>();
-		Boolean isDST = true;
+		Boolean isDST = false;
 		// 美原油 天然气 黄金 白银
 		// 夏令电子盘 06:00-05:00
 		// 冬令电子盘 07:00-06:00
@@ -86,12 +88,16 @@ public class Contract {
 		array.add(LocalTime.of(16, 35, 00));
 		commodityTradeTime.put("SGX.CN", array);
 	}
-	// 交易时间段
-	private ArrayList<LocalTime> tradeTimeArray = new ArrayList<LocalTime>();
 	
+	// K线写mongo
+	void WriteKLineToDB() {
+		
+	}
+	// 从mongo恢复当天K线
+	void LoadKLineFromDB() {
+		
+	}
 	static final int MAX_CONTRACT_NUM = 50;
-	
-	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
 	
 	// 保存上一笔行情,计算逐笔成交
 	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
@@ -101,7 +107,6 @@ public class Contract {
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
 
 
-	
 	Contract(String contractUID){
 		this.contractUID = contractUID;
 	}
@@ -180,18 +185,17 @@ public class Contract {
 			if (minkline.OpenPx == 0) {
 				long preminklineindex = getMinKLineIndex(contractUID, quote.DateTimeStamp, -1);
 				KLine preminkline = minklines.get(preminklineindex);
-				// TODO 处理行情丢失问题 
-				if (preminkline == null) {
+				// TODO 处理行情丢失问题
+				if (preminkline == null || preminkline.LastPx == 0) {
 					minkline.OpenPx = quote.QOpeningPrice;
 					// 补全缺失K线
 					// firstminklineIndex --> preminklineindex
 					// minklines.put(new Long(minklineindex), minkline);
-				}
-				else
+				} else
 					minkline.OpenPx = preminkline.LastPx > 0 ? preminkline.LastPx : quote.QOpeningPrice;
 			}
 		} else if (minklineindex < firstminklineIndex) {
-			System.out.println(
+			logger.error(
 					"ERROR: minklineindex[" + minklineindex + "] < firstminklineIndex[" + firstminklineIndex + "]");
 			return;
 		}
@@ -209,11 +213,11 @@ public class Contract {
 		minklines.put(new Long(minklineindex), minkline);
 
 		StringBuilder line = new StringBuilder(512);
-		line.append("Kline ").append(this.contractUID).append(minkline.index).append(" o:").append(minkline.OpenPx).append(" h:")
+		line.append(this.contractUID).append(" ").append(minkline.index).append(" o:").append(minkline.OpenPx).append(" h:")
 				.append(minkline.HighPx).append(" l:").append(minkline.LowPx).append(" c:").append(minkline.LastPx)
 				.append(" qty:").append(minkline.Volume).append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
 
-		System.out.println(line.toString());
+		logger.debug(line.toString());
 
 		last_quote = quote;
 	}
@@ -222,13 +226,15 @@ public class Contract {
 		// TODO Auto-generated method stub
 		LocalDate today = LocalDate.now();
 		logger.debug("Today's Local date : " + today);
-		
+
 		// 判断是否夏令时
-		logger.debug("inDaylightTime:"+TimeZone.getDefault().inDaylightTime( new Date() ));
-		
-		TimeZone tz = TimeZone.getTimeZone("EST");
+		logger.debug("inDaylightTime:" + TimeZone.getDefault().inDaylightTime(new Date()));
+
+		// JVM -Duser.timezone=GMT+08
+		TimeZone.setDefault(TimeZone.getTimeZone("GMT-05"));
+		TimeZone tz = TimeZone.getTimeZone("Asia/Shanghai");
 		boolean inDs = tz.inDaylightTime(new Date());
-		logger.debug("inDaylightTime:"+inDs);
+		logger.debug("inDaylightTime:" + inDs);
 	}
 
 }

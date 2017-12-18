@@ -6,6 +6,9 @@ import java.io.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.common.util.BufferUtil;
 import net.jtap.*;
 
@@ -15,7 +18,8 @@ import com.wilddog.wilddogcore.WilddogApp;
 import com.wilddog.wilddogcore.WilddogOptions;
 
 public class MarketDataSaver {
-
+	static Logger logger = LoggerFactory.getLogger(MarketDataSaver.class.getName());
+	
 	static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 	static final SimpleDateFormat marketDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -80,7 +84,7 @@ public class MarketDataSaver {
 					e.printStackTrace();
 				}
 			}
-			System.out.println("DataSaver Thread exiting...");
+			logger.info("DataSaver Thread exiting...");
 			for (BufferedWriter writer : dataWriterMap.values()) {
 				try {
 					writer.flush();
@@ -211,7 +215,7 @@ public class MarketDataSaver {
 				c.UpdateQuote(quote);
 			}
 
-			System.out.println("Calculate Thread exiting...");
+			logger.info("Calculate Thread exiting...");
 
 			marketDataQueueCalc.clear();
 		}
@@ -249,7 +253,7 @@ public class MarketDataSaver {
 			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
 			dataFileSuffix = dateFormat.format(new Date());
 		}
-		System.out.println("QuoteAPI version info: " + QuoteApi.GetVersion());
+		logger.info("QuoteAPI version info: " + QuoteApi.GetVersion());
 
 		//
 		Properties configProps = loadConfig();
@@ -266,46 +270,46 @@ public class MarketDataSaver {
 		}
 
 		// QuoteApi
-		System.out.println(" " + quoteHost + ":" + quotePort + " ... ");
+		logger.info(" " + quoteHost + ":" + quotePort + " ... ");
 		final QuoteApi mdApi = new QuoteApi(new TapAPIApplicationInfo(authCode, null));
 		mdApi.setListener(new QuoteApiListener() {
 
 			// @Override
 			public void OnRspLogin(int errorCode, TapAPIQuotLoginRspInfo info) {
-				System.out.println("QuoteAPI login: " + errorCode);
+				logger.info("QuoteAPI login: " + errorCode);
 				if (errorCode != 0)
 					requestStop = true;
 			}
 
 			// @Override
 			public void OnAPIReady() {
-				System.out.println("QuoteAPI ready.");
+				logger.info("QuoteAPI ready.");
 			}
 
 			// @Override
 			public void OnDisconnect(int reasonCode) {
-				System.out.println("QuoteAPI disconnected. reasonCode:"+reasonCode);
+				logger.info("QuoteAPI disconnected. reasonCode:"+reasonCode);
 				requestStop = true;
 			}
 
 			// @Override
 			public void OnRspChangePassword(int sessionID, int errorCode) {
-				System.out.println("OnRspChangePassword session " + sessionID + " errorCode" + errorCode);
+				logger.info("OnRspChangePassword session " + sessionID + " errorCode" + errorCode);
 			}
 
 			// @Override
 			public void OnRspQryCommodity(int sessionID, int errorCode, byte isLast, TapAPIQuoteCommodityInfo info) {
-				System.out.println("OnRspQryCommodity session:" + sessionID + " errorCode:" + errorCode + " " + info);
+				logger.info("OnRspQryCommodity session:" + sessionID + " errorCode:" + errorCode + " " + info);
 			}
 
 			// @Override
 			public void OnRspQryContract(int sessionID, int errorCode, byte isLast, TapAPIQuoteContractInfo info) {
-				System.out.println("OnRspQryContract session " + sessionID + " errorCode" + errorCode + " " + info);
+				logger.info("OnRspQryContract session " + sessionID + " errorCode" + errorCode + " " + info);
 			}
 
 			// @Override
 			public void OnRtnContract(TapAPIQuoteContractInfo info) {
-				System.out.println("OnRtnContract session " + info);
+				logger.info("OnRtnContract session " + info);
 			}
 
 			// @Override
@@ -322,7 +326,7 @@ public class MarketDataSaver {
 							+ "." + info.Contract.ContractNo1;
 					marketDataMap.put(contractUID, info);
 
-					System.out.println("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice + " "
+					logger.info("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice + " "
 							+ info.QLastQty);
 				} catch (InterruptedException e) {
 				}
@@ -330,7 +334,7 @@ public class MarketDataSaver {
 
 			// @Override
 			public void OnRspUnSubscribeQuote(int sessionID, int errorCode, byte isLast, TapAPIContract info) {
-				System.out.println("OnRspUnSubscribeQuote session " + sessionID + " error " + errorCode + " : " + info);
+				logger.info("OnRspUnSubscribeQuote session " + sessionID + " error " + errorCode + " : " + info);
 			}
 
 			// @Override
@@ -375,12 +379,12 @@ public class MarketDataSaver {
 					}
 				}
 
-				System.out.println("ShutdownHook");
+				logger.info("ShutdownHook");
 			}
 		});
 
 		// 行情写野狗
-		System.out.println("启动线程行情写入云端..." + ThreadFuncWilddogWrite.urlWilddogSync);
+		logger.info("启动线程行情写入云端..." + ThreadFuncWilddogWrite.urlWilddogSync);
 		ThreadFuncWilddogWrite threadFuncWilddogWrite = new ThreadFuncWilddogWrite();
 		Thread writeThread = new Thread(threadFuncWilddogWrite);
 		writeThread.setName("Market data wilddog write thread");
@@ -388,8 +392,8 @@ public class MarketDataSaver {
 		writeThread.start();
 
 		// 行情写文件
-		System.out.println("启动线程行情写文件..." + dataDir.getAbsolutePath());
-		System.out.println("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
+		logger.info("启动线程行情写文件..." + dataDir.getAbsolutePath());
+		logger.info("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
 		dataDir.mkdirs();
 		SaveThread saver = new SaveThread();
 		Thread saverThread = new Thread(saver);
@@ -398,7 +402,7 @@ public class MarketDataSaver {
 		saverThread.start();
 
 		// 行情计算 K线 分时
-		System.out.println("启动线程行情计算...");
+		logger.info("启动线程行情计算...");
 		ThreadFuncCalculateQuote threadFuncCalculateQuote = new ThreadFuncCalculateQuote();
 		Thread calculateThread = new Thread(threadFuncCalculateQuote);
 		calculateThread.setName("Market data calculate thread");
@@ -415,7 +419,7 @@ public class MarketDataSaver {
 
 		{
 			// 查询服务器支持的品种
-			System.out.println("查询服务器支持的品种 Query commodity ...");
+			logger.info("查询服务器支持的品种 Query commodity ...");
 			TapAPIQuoteCommodityInfo[] infos = mdApi.SyncAllQryCommodity();
 			for (int i = 0; i < infos.length; i++) {
 				TapAPIQuoteCommodityInfo info = infos[i];
@@ -430,9 +434,9 @@ public class MarketDataSaver {
 					builder.append(info.CommodityName);
 				}
 				builder.append(" exchange ").append(info.Commodity.ExchangeNo);
-				System.out.println(builder.toString());
+				logger.info(builder.toString());
 			}
-			System.out.flush();
+//			System.out.flush();
 		}
 
 		// 订阅行情 api数量限制50个合约
@@ -442,7 +446,7 @@ public class MarketDataSaver {
 				String exchangeId = parts[0];
 				String commodityNo = parts[1];
 				String contractNo = parts[2];
-				System.out.println(
+				logger.info(
 						"Subscribe exchange " + exchangeId + " commodity " + commodityNo + " contract " + contractNo);
 				TapAPIContract contract = new TapAPIContract();
 
@@ -456,7 +460,7 @@ public class MarketDataSaver {
 				mdApi.SubscribeQuote(contract);
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
-				System.out.println(e.getMessage());
+				logger.info(e.getMessage());
 				// e.printStackTrace();
 			}
 		}
@@ -471,7 +475,7 @@ public class MarketDataSaver {
 			int hour = calendar.get(Calendar.HOUR_OF_DAY);
 			int minute = calendar.get(Calendar.MINUTE);
 			if (count == 0 && hour >= 23 && minute >= 59) {
-				System.out.println("Market is closed, exiting..." + date);
+				logger.info("Market is closed, exiting..." + date);
 				requestStop = true;
 			}
 			if (requestStop)
@@ -481,11 +485,11 @@ public class MarketDataSaver {
 		Date date = new Date();
 		int count = dataCount.getAndSet(0);
 		if (count > 0)
-			System.out.println(dateFormat.format(date) + " Market data receieved: " + count);
+			logger.info(dateFormat.format(date) + " Market data receieved: " + count);
 
 		mdApi.Close();
 		/**/
-		System.out.println(dateFormat.format(date) + " main EXIT");
+		logger.info(dateFormat.format(date) + " main EXIT");
 	}
 
 	// 配置文件
