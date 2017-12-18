@@ -3,6 +3,7 @@ package esuny_wilddog.esuny_wilddog;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import org.slf4j.Logger;
@@ -17,7 +18,7 @@ public class Contract {
 	static final int MAX_CONTRACT_NUM = 50;
 	
 	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
-	TapAPIQuoteWhole pre_quote = new TapAPIQuoteWhole();
+	
 	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
 	
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
@@ -125,23 +126,23 @@ public class Contract {
 
 		minkline.LastPx = quote.QLastPrice;
 
-		minkline.Volume += quote.QTotalQty - pre_quote.QTotalQty;
+		minkline.Volume += quote.QTotalQty - last_quote.QTotalQty;
 
 		minklines.put(new Long(minklineindex), minkline);
 
 		StringBuilder line = new StringBuilder(512);
-		line.append("Kline ").append(minkline.index).append(" o:").append(minkline.OpenPx).append(" h:")
+		line.append("Kline ").append(this.contractUID).append(minkline.index).append(" o:").append(minkline.OpenPx).append(" h:")
 				.append(minkline.HighPx).append(" l:").append(minkline.LowPx).append(" c:").append(minkline.LastPx)
-				.append(" qty:").append(minkline.Volume).append(" deal:").append(quote.QTotalQty - pre_quote.QTotalQty);
+				.append(" qty:").append(minkline.Volume).append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
 
 		System.out.println(line.toString());
 
-		pre_quote = quote;
+		last_quote = quote;
 	}
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
-		
+		LocalDate today = LocalDate.now(); System.out.println("Today's Local date : " + today);
 	}
 
 }

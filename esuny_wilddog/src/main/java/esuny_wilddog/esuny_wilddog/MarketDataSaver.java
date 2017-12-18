@@ -106,7 +106,7 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				// sleep 200ms
 				try {
-					Thread.sleep(200);
+					Thread.sleep(400);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -284,7 +284,7 @@ public class MarketDataSaver {
 
 			// @Override
 			public void OnDisconnect(int reasonCode) {
-				System.out.println("QuoteAPI disconnected.");
+				System.out.println("QuoteAPI disconnected. reasonCode:"+reasonCode);
 				requestStop = true;
 			}
 
@@ -295,7 +295,7 @@ public class MarketDataSaver {
 
 			// @Override
 			public void OnRspQryCommodity(int sessionID, int errorCode, byte isLast, TapAPIQuoteCommodityInfo info) {
-				System.out.println("OnRspQryCommodity session " + sessionID + " errorCode" + errorCode + " " + info);
+				System.out.println("OnRspQryCommodity session:" + sessionID + " errorCode:" + errorCode + " " + info);
 			}
 
 			// @Override
@@ -485,7 +485,7 @@ public class MarketDataSaver {
 
 		mdApi.Close();
 		/**/
-		System.out.println(dateFormat.format(date) + " EXIT");
+		System.out.println(dateFormat.format(date) + " main EXIT");
 	}
 
 	// 配置文件
