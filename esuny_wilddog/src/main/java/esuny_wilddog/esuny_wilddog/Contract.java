@@ -1,5 +1,15 @@
 package esuny_wilddog.esuny_wilddog;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -21,11 +31,12 @@ public class Contract {
 	
 	// 合约名称 NYMEX.CL.1801
 	String contractUID;
-	
+
 	// 全部品种交易时间信息
-	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime= new HashMap<String, ArrayList<LocalTime>>();
+	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime = new HashMap<String, ArrayList<LocalTime>>();
+
 	static void InitTradeTime() {
-		 ArrayList<LocalTime> array = new ArrayList<LocalTime>();
+		ArrayList<LocalTime> array = new ArrayList<LocalTime>();
 		Boolean isDST = false;
 		// 美原油 天然气 黄金 白银
 		// 夏令电子盘 06:00-05:00
@@ -45,7 +56,7 @@ public class Contract {
 		commodityTradeTime.put("NYMEX.NG", array);
 		commodityTradeTime.put("NYMEX.GC", array);
 		commodityTradeTime.put("NYMEX.SI", array);
-		
+
 		// 德指
 		// 夏令电子盘 13:50-04:00*
 		// 冬令电子盘 14:50-05:00
@@ -62,7 +73,7 @@ public class Contract {
 			array.add(LocalTime.of(05, 00, 00));
 		}
 		commodityTradeTime.put("EUREX.DAX", array);
-		
+
 		// 大恒指 小恒指
 		// 09:15-12:00; 13:00-16:30
 		// (T+1)17:15-01:00
@@ -75,7 +86,7 @@ public class Contract {
 		array.add(LocalTime.of(16, 30, 00));
 		commodityTradeTime.put("HKEX.HSI", array);
 		commodityTradeTime.put("HKEX.MHI", array);
-			
+
 		// A50
 		// 09:00-16:35;
 		// (T+1)17:00-04:45
@@ -88,20 +99,38 @@ public class Contract {
 		array.add(LocalTime.of(16, 35, 00));
 		commodityTradeTime.put("SGX.CN", array);
 	}
+
+	// 从文件恢复当天K线
+	void LoadKLineFile(File dataDir, String filename) throws IOException {
+		try {
+			BufferedReader reader = new BufferedReader(
+					new InputStreamReader(new FileInputStream(new File(dataDir, filename)), "UTF-8"));
+			String line = null;
+			while ((line = reader.readLine()) != null) {
+				logger.debug(line);
+				String s[] = line.split(" ");
+				KLine k = new KLine();
+//				k.index = Long.parseLong(s[0]);
+//				k.OpenPx = Double.parseDouble(s[1]);
+//				k.HighPx = Double.parseDouble(s[2]);
+//				k.LowPx = Double.parseDouble(s[3]);
+//				k.LastPx = Double.parseDouble(s[4]);
+//				k.Volume = Long.parseLong(s[5]);
+//				k.TotalQty = Long.parseLong(s[6]);
+			}
+			reader.close();
+		} catch (UnsupportedEncodingException e) {
+			logger.error(dataDir + filename + ":" + e.getMessage());
+		} catch (FileNotFoundException e) {
+			logger.error(dataDir + filename + ":" + e.getMessage());
+		}
+	}
 	
-	// K线写mongo
-	void WriteKLineToDB() {
-		
-	}
-	// 从mongo恢复当天K线
-	void LoadKLineFromDB() {
-		
-	}
 	static final int MAX_CONTRACT_NUM = 50;
 	
 	// 保存上一笔行情,计算逐笔成交
 	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
-	
+	public KLine last_kline = new KLine();
 	
 	// 全天分钟K线 分时线 
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
@@ -127,12 +156,11 @@ public class Contract {
 		long l = 0;
 		Date d = new Date();
 		Date dd = new Date();
-//		System.out.println(d.toString() + d.getTime());
 		try {
 			d = df.parse(strDateTimestamp);
-			dd = new Date(d.getTime() + n * 60 * 1000);
+			// TODO 需完善交易时间段判断
+			dd = new Date(d.getTime() + n * 60 * 1000);	
 		} catch (ParseException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		l = DateUtils.toLong(dd) / 100 * 100;
@@ -143,32 +171,33 @@ public class Contract {
 	 * 根据时间戳判断品种所属交易日 
 	 * 
 	 */
-	public static Long getTradeDay(String contractUID, String strDateTimestamp) {
-		//TODO T
-		return new Long(0);
+	public static Long getTradeDay(String commodityUID, String strDateTimestamp) {
+		// TODO
+		LocalDate ld = LocalDate.now();
+
+		return new Long(ld.getYear() * 10000 + ld.getMonthValue() * 100 + ld.getDayOfMonth());
 	}
 	
 	/**
 	 * 根据时间戳判断品种交易日第一根分钟K线下标
 	 * 
 	 */
-	public static Long getFirstMinKLineIndex(String contractUID,  String strDateTimestamp) {
+	public static Long getFirstMinKLineIndex(String commodityUID,  String strDateTimestamp) {
 		//TODO T
-		Long nTradeDay = getTradeDay(contractUID, strDateTimestamp);
-		
+		Long nTradeDay = getTradeDay(commodityUID, strDateTimestamp);
+		LocalTime lt = LocalTime.now();
 		return new Long(0);
 	}
 	
 	public void UpdateQuote(TapAPIQuoteWhole quote) {
-		// 合约ID
-		String contractUID = quote.Contract.Commodity.ExchangeNo 
-				+ "." + quote.Contract.Commodity.CommodityNo
-				+ "." + quote.Contract.ContractNo1;
-
+		// 品种ID
+		String commodityUID = quote.Contract.Commodity.ExchangeNo 
+				+ "." + quote.Contract.Commodity.CommodityNo;
+		
 		// 第一根K线下标
-		long firstminklineIndex = getFirstMinKLineIndex(contractUID, quote.DateTimeStamp);
+		long firstminklineIndex = getFirstMinKLineIndex(commodityUID, quote.DateTimeStamp);
 		// 当前分钟K下标
-		long minklineindex = getMinKLineIndex(contractUID, quote.DateTimeStamp, 0);
+		long minklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, 0);
 		
 		KLine minkline = minklines.get(new Long(minklineindex));
 		if (minkline == null) {
@@ -177,22 +206,24 @@ public class Contract {
 
 		// 分钟K线首次更新 openpx需特别处理
 		if (minklineindex == firstminklineIndex) {
-			if (minkline.OpenPx == 0) {
-				minkline.preClosePx = quote.QPreClosingPrice;
-				minkline.OpenPx = quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice;			
+			if (minkline.getOpenPx() == 0) {
+				minkline.setOpenPx( quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice);			
 			}		
 		} else if (minklineindex > firstminklineIndex) {
-			if (minkline.OpenPx == 0) {
-				long preminklineindex = getMinKLineIndex(contractUID, quote.DateTimeStamp, -1);
+			if (minkline.getOpenPx() == 0) {
+				long preminklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, -1);
 				KLine preminkline = minklines.get(preminklineindex);
 				// TODO 处理行情丢失问题
-				if (preminkline == null || preminkline.LastPx == 0) {
-					minkline.OpenPx = quote.QOpeningPrice;
+				if (preminkline == null || preminkline.getLastPx() == 0) {
+					minkline.setOpenPx(quote.QOpeningPrice);
+					
+					last_quote = quote; // trick 避免巨量成交
+					
 					// 补全缺失K线
 					// firstminklineIndex --> preminklineindex
 					// minklines.put(new Long(minklineindex), minkline);
 				} else
-					minkline.OpenPx = preminkline.LastPx > 0 ? preminkline.LastPx : quote.QOpeningPrice;
+					minkline.setOpenPx(preminkline.getLastPx() > 0 ? preminkline.getLastPx() : quote.QOpeningPrice);
 			}
 		} else if (minklineindex < firstminklineIndex) {
 			logger.error(
@@ -200,28 +231,33 @@ public class Contract {
 			return;
 		}
 
-		if (minkline.HighPx < quote.QLastPrice)
-			minkline.HighPx = quote.QLastPrice;
+		if (minkline.getHighPx() < quote.QLastPrice)
+			minkline.setHighPx(quote.QLastPrice);
 
-		if (minkline.LowPx == 0 || minkline.LowPx > quote.QLastPrice)
-			minkline.LowPx = quote.QLastPrice;
+		if (minkline.getLowPx() == 0 || minkline.getLowPx() > quote.QLastPrice)
+			minkline.setLowPx (quote.QLastPrice);
 
-		minkline.LastPx = quote.QLastPrice;
+		minkline.setLastPx(quote.QLastPrice);
 
-		minkline.Volume += quote.QTotalQty - last_quote.QTotalQty;
-
+		minkline.setVolume(minkline.getVolume() + quote.QTotalQty - last_quote.QTotalQty);
+		
+		minkline.setTotalQty(quote.QTotalQty);
+		
 		minklines.put(new Long(minklineindex), minkline);
 
 		StringBuilder line = new StringBuilder(512);
-		line.append(this.contractUID).append(" ").append(minkline.index).append(" o:").append(minkline.OpenPx).append(" h:")
-				.append(minkline.HighPx).append(" l:").append(minkline.LowPx).append(" c:").append(minkline.LastPx)
-				.append(" qty:").append(minkline.Volume).append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
-
+		line.append(this.toString());
+		
+		if(quote.QTotalQty - last_quote.QTotalQty > 0) {
+			line.append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
+		}
+		
 		logger.debug(line.toString());
 
 		last_quote = quote;
 	}
 
+	
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		LocalDate today = LocalDate.now();

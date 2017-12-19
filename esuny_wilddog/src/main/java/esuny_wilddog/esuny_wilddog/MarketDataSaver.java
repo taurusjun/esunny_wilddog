@@ -23,15 +23,19 @@ public class MarketDataSaver {
 	static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 	static final SimpleDateFormat marketDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
-	static String dataFileSuffix;
 	static AtomicInteger dataCount = new AtomicInteger();
 	static volatile boolean requestStop;
 
+	static String dataFileSuffix;
 	static File dataDir = new File("data");
+	// 行情写文件 数据缓冲区
 	static final Map<String, BufferedWriter> dataWriterMap = new HashMap<String, BufferedWriter>();
-	// 写文件 数据缓冲区
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueue = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 
+	// K线写文件 数据缓冲区
+	static final Map<String, BufferedWriter> klineWriterMap = new HashMap<String, BufferedWriter>();
+	static final BlockingQueue<KLine> klineQueue = new LinkedBlockingDeque<KLine>();
+	
 	// 行情计算 数据缓冲区
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueueCalc = new LinkedBlockingDeque<TapAPIQuoteWhole>();
 
@@ -41,7 +45,7 @@ public class MarketDataSaver {
 	// 合约集合
 	static final Map<String, Contract> contractsMap = new HashMap<String, Contract>(Contract.MAX_CONTRACT_NUM);
 
-	private static class SaveThread implements Runnable {
+	private static class SaveQuoteThread implements Runnable {
 
 		// @Override
 		public void run() {
@@ -62,21 +66,24 @@ public class MarketDataSaver {
 
 					BufferedWriter writer = dataWriterMap.get(contractUID);
 					if (writer == null) {
-						writer = new BufferedWriter(new OutputStreamWriter(
-								new FileOutputStream(new File(dataDir, contractUID + "." + dataFileSuffix), true),
-								"UTF-8"));
+						writer = new BufferedWriter(
+								new OutputStreamWriter(
+										new FileOutputStream(
+												new File(dataDir, "quote." + contractUID + "." + dataFileSuffix), true),
+										"UTF-8"));
 						writer.write("\n");
 						dataWriterMap.put(contractUID, writer);
 					}
 					line.setLength(0);
 
-					line.append(quote.DateTimeStamp).append(",").append(quote.Contract.Commodity.ExchangeNo).append(",")
-							.append(quote.Contract.Commodity.CommodityNo + quote.Contract.ContractNo1).append(",")
-							.append(quote.QTotalQty).append(",").append(quote.QLastQty).append(",")
+					line.append(quote.DateTimeStamp).append(",")
+							.append(quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo
+									+ "." + quote.Contract.ContractNo1)
+							.append(",").append(quote.QTotalQty).append(",").append(quote.QLastQty).append(",")
 							.append(price2str(quote.QLastPrice)).append("\n");
 
 					// TODO writer
-					// writer.write(line.toString());
+				    // writer.write(line.toString());
 					if (queueLength < 100)
 						writer.flush();
 
@@ -93,6 +100,56 @@ public class MarketDataSaver {
 				}
 			}
 			dataWriterMap.clear();
+		}
+	}
+
+	private static class SaveKLineThread implements Runnable {
+
+		// @Override
+		public void run() {
+			StringBuilder line = new StringBuilder(512);
+			while (!requestStop) {
+				int queueLength = 0;
+				KLine kline = null;
+				try {
+					kline = klineQueue.take();
+					queueLength = klineQueue.size();
+				} catch (InterruptedException e) {
+				}
+				if (kline == null)
+					continue;
+				try {
+					String contractUID = kline.contractUID;
+
+					BufferedWriter writer = klineWriterMap.get(contractUID);
+					if (writer == null) {
+						writer = new BufferedWriter(new OutputStreamWriter(
+								new FileOutputStream(new File(dataDir, "minkline." + contractUID), true), "UTF-8"));
+						writer.write("\n");
+						klineWriterMap.put(contractUID, writer);
+					}
+					line.setLength(0);
+
+					line.append(kline.toString()).append("\n");
+
+					// TODO writer
+				    // writer.write(line.toString());
+					if (queueLength < 100)
+						writer.flush();
+					
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			logger.info("KLine Saver Thread exiting...");
+			for (BufferedWriter writer : klineWriterMap.values()) {
+				try {
+					writer.flush();
+					writer.close();
+				} catch (Exception e) {
+				}
+			}
+			klineWriterMap.clear();
 		}
 	}
 
@@ -221,6 +278,7 @@ public class MarketDataSaver {
 		}
 	}
 
+	// 格式化
 	static final DecimalFormat millisecFormat = new DecimalFormat("000");
 
 	@SuppressWarnings("unused")
@@ -244,6 +302,7 @@ public class MarketDataSaver {
 		return quantityFormat.format(qty);
 	}
 
+	//
 	public static void main(String[] args) throws Throwable {
 
 		// System.out.println("Turbo Mode: " + BufferUtil.isTurboModeEnabled());
@@ -255,7 +314,7 @@ public class MarketDataSaver {
 		}
 		logger.info("QuoteAPI version info: " + QuoteApi.GetVersion());
 
-		//
+		// 加载配置文件
 		Properties configProps = loadConfig();
 		String authCode = configProps.getProperty("tap.authCode");
 		String quoteHost = configProps.getProperty("tap.quoteHost");
@@ -263,14 +322,17 @@ public class MarketDataSaver {
 		String userId = configProps.getProperty("tap.userId");
 		String password = configProps.getProperty("tap.password");
 		String ids[] = configProps.getProperty("marketDataSaver.instrumentIds").split(",");
-
-		// 初始化分钟K线集合
+		String wilddogURL = configProps.getProperty("urlWilddogSync");
+		
+		// 初始化合约集合
 		for (int i = 0; i < ids.length; i++) {
-			contractsMap.put(ids[i], new Contract(ids[i]));
+			Contract c = new Contract(ids[i]);
+			// TODO 加载K线文件
+			c.LoadKLineFile(dataDir, "minkline." + ids[i]);
+			contractsMap.put(ids[i], c);	
 		}
 
-		// QuoteApi
-		logger.info(" " + quoteHost + ":" + quotePort + " ... ");
+		// 初始化 QuoteApi
 		final QuoteApi mdApi = new QuoteApi(new TapAPIApplicationInfo(authCode, null));
 		mdApi.setListener(new QuoteApiListener() {
 
@@ -351,7 +413,7 @@ public class MarketDataSaver {
 							+ "." + info.Contract.ContractNo1;
 					marketDataMap.put(contractUID, info);
 
-					// System.out.println("行情更新" + contractUID + " " + info.DateTimeStamp
+					// logger.debug("行情更新" + contractUID + " " + info.DateTimeStamp
 					// + " " + info.QLastPrice
 					// + " " + info.QLastQty);
 				} catch (InterruptedException e) {
@@ -359,7 +421,16 @@ public class MarketDataSaver {
 			}
 
 		});
-
+		
+		// QuoteApi登陆行情服务器
+		TapAPIQuoteLoginAuth loginAuth = new TapAPIQuoteLoginAuth();
+		loginAuth.UserNo = userId;
+		loginAuth.Password = password;
+		loginAuth.ISModifyPassword = JtapConstants.APIYNFLAG_NO;
+		loginAuth.ISDDA = JtapConstants.APIYNFLAG_NO;
+		mdApi.SyncLogin(quoteHost, quotePort, loginAuth);
+		logger.info("行情地址:" + quoteHost + ":" + quotePort + " ... ");
+		
 		// ShutdownHook
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
@@ -384,6 +455,8 @@ public class MarketDataSaver {
 		});
 
 		// 行情写野狗
+		if (!wilddogURL.isEmpty())
+			ThreadFuncWilddogWrite.urlWilddogSync = wilddogURL;
 		logger.info("启动线程行情写入云端..." + ThreadFuncWilddogWrite.urlWilddogSync);
 		ThreadFuncWilddogWrite threadFuncWilddogWrite = new ThreadFuncWilddogWrite();
 		Thread writeThread = new Thread(threadFuncWilddogWrite);
@@ -395,9 +468,9 @@ public class MarketDataSaver {
 		logger.info("启动线程行情写文件..." + dataDir.getAbsolutePath());
 		logger.info("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
 		dataDir.mkdirs();
-		SaveThread saver = new SaveThread();
+		SaveQuoteThread saver = new SaveQuoteThread();
 		Thread saverThread = new Thread(saver);
-		saverThread.setName("Market data saver thread");
+		saverThread.setName("Quote data saver thread");
 		saverThread.setDaemon(true);
 		saverThread.start();
 
@@ -409,13 +482,13 @@ public class MarketDataSaver {
 		calculateThread.setDaemon(true);
 		calculateThread.start();
 
-		// ES quoteapi login
-		TapAPIQuoteLoginAuth loginAuth = new TapAPIQuoteLoginAuth();
-		loginAuth.UserNo = userId;
-		loginAuth.Password = password;
-		loginAuth.ISModifyPassword = JtapConstants.APIYNFLAG_NO;
-		loginAuth.ISDDA = JtapConstants.APIYNFLAG_NO;
-		mdApi.SyncLogin(quoteHost, quotePort, loginAuth);
+		// K线写文件
+		logger.info("启动线程K线写文件..." + dataDir.getAbsolutePath());
+		SaveKLineThread klineSaver = new SaveKLineThread();
+		Thread klineSaverThread = new Thread(klineSaver);
+		klineSaverThread.setName("KLine data saver thread");
+		klineSaverThread.setDaemon(true);
+		klineSaverThread.start();
 
 		{
 			// 查询服务器支持的品种
@@ -436,7 +509,6 @@ public class MarketDataSaver {
 				builder.append(" exchange ").append(info.Commodity.ExchangeNo);
 				logger.info(builder.toString());
 			}
-//			System.out.flush();
 		}
 
 		// 订阅行情 api数量限制50个合约
@@ -459,17 +531,30 @@ public class MarketDataSaver {
 				contract.CallOrPutFlag2 = JtapConstants.TAPI_CALLPUT_FLAG_NONE;
 				mdApi.SubscribeQuote(contract);
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				logger.info(e.getMessage());
+				logger.error(e.getMessage());
 				// e.printStackTrace();
 			}
 		}
-
+	
 		while (!requestStop) {
 			Thread.sleep(60 * 1000);
+			
+			// 行情接收数量统计 
 			Date date = new Date();
 			int count = dataCount.getAndSet(0);
-			System.out.println(dateFormat.format(date) + " Market data receieved: " + count);
+			logger.info(dateFormat.format(date) + " Market data receieved: " + count);
+			
+			// 定时存文件
+			for (Contract c : contractsMap.values()) {
+				try {
+					if (c.last_kline.getIndex() != 0) {
+						klineQueue.put(c.last_kline);
+					}
+				} catch (Exception e) {
+				}
+			}
+			
+			// TODO 定时重启  待定05:30
 			Calendar calendar = Calendar.getInstance();
 			calendar.setTime(date);
 			int hour = calendar.get(Calendar.HOUR_OF_DAY);
@@ -478,6 +563,7 @@ public class MarketDataSaver {
 				logger.info("Market is closed, exiting..." + date);
 				requestStop = true;
 			}
+			
 			if (requestStop)
 				break;
 		}
