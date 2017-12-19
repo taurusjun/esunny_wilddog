@@ -2,12 +2,14 @@ package esuny_wilddog.esuny_wilddog;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
@@ -34,6 +36,14 @@ public class Contract {
 
 	// 全部品种交易时间信息
 	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime = new HashMap<String, ArrayList<LocalTime>>();
+	
+	// 保存上一笔行情,计算逐笔成交
+	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
+	public KLine last_kline = new KLine();
+	
+	// 全天分钟K线 分时线 
+	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
+
 
 	static void InitTradeTime() {
 		ArrayList<LocalTime> array = new ArrayList<LocalTime>();
@@ -100,41 +110,24 @@ public class Contract {
 		commodityTradeTime.put("SGX.CN", array);
 	}
 
-	// 从文件恢复当天K线
-	void LoadKLineFile(File dataDir, String filename) throws IOException {
+	// 从文件恢复K线
+	void LoadKLineFile(File dataDir, String filename) throws IOException, ClassNotFoundException {
 		try {
-			BufferedReader reader = new BufferedReader(
-					new InputStreamReader(new FileInputStream(new File(dataDir, filename)), "UTF-8"));
-			String line = null;
-			while ((line = reader.readLine()) != null) {
-				logger.debug(line);
-				String s[] = line.split(" ");
-				KLine k = new KLine();
-//				k.index = Long.parseLong(s[0]);
-//				k.OpenPx = Double.parseDouble(s[1]);
-//				k.HighPx = Double.parseDouble(s[2]);
-//				k.LowPx = Double.parseDouble(s[3]);
-//				k.LastPx = Double.parseDouble(s[4]);
-//				k.Volume = Long.parseLong(s[5]);
-//				k.TotalQty = Long.parseLong(s[6]);
+			File file = new File(dataDir, filename);
+			FileInputStream fis = new FileInputStream(file);
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			while (fis.available() > 0) {
+				KLine k = (KLine) ois.readObject();
+				minklines.put(new Long(k.getIndex()), k);
 			}
-			reader.close();
-		} catch (UnsupportedEncodingException e) {
-			logger.error(dataDir + filename + ":" + e.getMessage());
+			ois.close();
 		} catch (FileNotFoundException e) {
 			logger.error(dataDir + filename + ":" + e.getMessage());
 		}
+		
 	}
 	
 	static final int MAX_CONTRACT_NUM = 50;
-	
-	// 保存上一笔行情,计算逐笔成交
-	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
-	public KLine last_kline = new KLine();
-	
-	// 全天分钟K线 分时线 
-	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
-
 
 	Contract(String contractUID){
 		this.contractUID = contractUID;
@@ -243,18 +236,21 @@ public class Contract {
 		
 		minkline.setTotalQty(quote.QTotalQty);
 		
+		last_quote = quote;
+		
+		if (minklines.size()>1 && last_kline.getIndex() != minkline.getIndex() ) {
+			last_kline = minkline;
+		}
+		
 		minklines.put(new Long(minklineindex), minkline);
 
 		StringBuilder line = new StringBuilder(512);
-		line.append(this.toString());
-		
+		line.append(this.toString());	
 		if(quote.QTotalQty - last_quote.QTotalQty > 0) {
 			line.append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
 		}
 		
 		logger.debug(line.toString());
-
-		last_quote = quote;
 	}
 
 	

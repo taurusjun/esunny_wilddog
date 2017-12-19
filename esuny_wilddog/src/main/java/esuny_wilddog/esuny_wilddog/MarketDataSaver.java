@@ -107,49 +107,46 @@ public class MarketDataSaver {
 
 		// @Override
 		public void run() {
-			StringBuilder line = new StringBuilder(512);
+		   boolean isFileExist = false;
+		   
 			while (!requestStop) {
-				int queueLength = 0;
+				
 				KLine kline = null;
 				try {
 					kline = klineQueue.take();
-					queueLength = klineQueue.size();
 				} catch (InterruptedException e) {
 				}
 				if (kline == null)
 					continue;
+				
 				try {
-					String contractUID = kline.contractUID;
+					File file = new File(dataDir, "minkline." + kline.contractUID);
 
-					BufferedWriter writer = klineWriterMap.get(contractUID);
-					if (writer == null) {
-						writer = new BufferedWriter(new OutputStreamWriter(
-								new FileOutputStream(new File(dataDir, "minkline." + contractUID), true), "UTF-8"));
-						writer.write("\n");
-						klineWriterMap.put(contractUID, writer);
+					if (file.exists()) { // 文件是否存在
+						isFileExist = true;
+						FileOutputStream fos = new FileOutputStream(file, true);
+						ObjectOutputStream oos = new ObjectOutputStream(fos);
+						
+						long pos = 0;
+						if (isFileExist) {
+							pos = fos.getChannel().position() - 4;// 追加的时候去掉头部aced 0005
+							fos.getChannel().truncate(pos);
+						}
+						oos.writeObject(kline);
+						oos.close();
+					} else {// 文件不存在
+						file.createNewFile();
+
+						FileOutputStream fos = new FileOutputStream(file, true);
+						ObjectOutputStream oos = new ObjectOutputStream(fos);
+						oos.writeObject(kline);
+						oos.close();
 					}
-					line.setLength(0);
-
-					line.append(kline.toString()).append("\n");
-
-					// TODO writer
-				    // writer.write(line.toString());
-					if (queueLength < 100)
-						writer.flush();
-					
 				} catch (Exception e) {
-					e.printStackTrace();
+					logger.error(e.toString());
 				}
 			}
 			logger.info("KLine Saver Thread exiting...");
-			for (BufferedWriter writer : klineWriterMap.values()) {
-				try {
-					writer.flush();
-					writer.close();
-				} catch (Exception e) {
-				}
-			}
-			klineWriterMap.clear();
 		}
 	}
 
