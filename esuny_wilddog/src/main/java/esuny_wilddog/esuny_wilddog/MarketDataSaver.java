@@ -174,7 +174,7 @@ public class MarketDataSaver {
 				Iterator<TapAPIQuoteWhole> i = c.iterator();
 				while (i.hasNext()) {
 					TapAPIQuoteWhole info = (TapAPIQuoteWhole) i.next();
-					// System.out.println(i.next());
+					// logger.debug(i.next());
 
 					// 合约子树
 					Map<String, Object> childrenMap = new HashMap<String, Object>();
@@ -237,9 +237,10 @@ public class MarketDataSaver {
 				}
 				ref.updateChildren(rootMap);
 			}
-			System.out.println("Wilddog Write Thread exiting...");
+
 			SyncReference.goOffline();
 			marketDataMap.clear();
+			logger.info("Wilddog Write Thread exiting...");
 		}
 	}
 
@@ -302,7 +303,7 @@ public class MarketDataSaver {
 	//
 	public static void main(String[] args) throws Throwable {
 
-		// System.out.println("Turbo Mode: " + BufferUtil.isTurboModeEnabled());
+		// logger.debug("Turbo Mode: " + BufferUtil.isTurboModeEnabled());
 		/**/
 		{
 			// 数据文件后缀年月日
@@ -597,7 +598,7 @@ public class MarketDataSaver {
 				is = new FileInputStream(file);
 		}
 		if (is == null) {
-			System.out.println("Unable to load config.properties from classpath or current directory.");
+			logger.error("Unable to load config.properties from classpath or current directory.");
 			System.exit(1);
 		}
 		configProps.load(is);

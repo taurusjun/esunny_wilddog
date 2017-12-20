@@ -1,17 +1,10 @@
 package esuny_wilddog.esuny_wilddog;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
-import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -44,6 +37,8 @@ public class Contract {
 	// 全天分钟K线 分时线 
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
 
+	// 日K
+	private KLine daykline = new KLine();
 
 	static void InitTradeTime() {
 		ArrayList<LocalTime> array = new ArrayList<LocalTime>();
@@ -111,7 +106,7 @@ public class Contract {
 	}
 
 	// 从文件恢复K线
-	void LoadKLineFile(File dataDir, String filename) throws IOException, ClassNotFoundException {
+	void LoadKLineFile(File dataDir, String filename){
 		try {
 			File file = new File(dataDir, filename);
 			FileInputStream fis = new FileInputStream(file);
@@ -121,7 +116,12 @@ public class Contract {
 				minklines.put(new Long(k.getIndex()), k);
 			}
 			ois.close();
+			logger.info("minklines.size():"+minklines.size());
 		} catch (FileNotFoundException e) {
+			logger.error(dataDir + filename + ":" + e.getMessage());
+		} catch (IOException e) {
+			logger.error(dataDir + filename + ":" + e.getMessage());
+		} catch (ClassNotFoundException e) {
 			logger.error(dataDir + filename + ":" + e.getMessage());
 		}
 		
@@ -187,6 +187,8 @@ public class Contract {
 		String commodityUID = quote.Contract.Commodity.ExchangeNo 
 				+ "." + quote.Contract.Commodity.CommodityNo;
 		
+
+		
 		// 第一根K线下标
 		long firstminklineIndex = getFirstMinKLineIndex(commodityUID, quote.DateTimeStamp);
 		// 当前分钟K下标
@@ -194,9 +196,14 @@ public class Contract {
 		
 		KLine minkline = minklines.get(new Long(minklineindex));
 		if (minkline == null) {
+			// 合约ID
+			String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo + "."
+					+ quote.Contract.ContractNo1;		
+			
 			minkline = new KLine(new Long(minklineindex));
+			minkline.contractUID = contractUID;
 		}
-
+//		logger.debug("firstminklineIndex:"+firstminklineIndex + " minklineindex:"+minklineindex);
 		// 分钟K线首次更新 openpx需特别处理
 		if (minklineindex == firstminklineIndex) {
 			if (minkline.getOpenPx() == 0) {
@@ -208,8 +215,8 @@ public class Contract {
 				KLine preminkline = minklines.get(preminklineindex);
 				// TODO 处理行情丢失问题
 				if (preminkline == null || preminkline.getLastPx() == 0) {
-					minkline.setOpenPx(quote.QOpeningPrice);
-					
+					minkline.setOpenPx(quote.QPreClosingPrice);
+					logger.debug("quote.QPreClosingPrice:"+quote.QPreClosingPrice);
 					last_quote = quote; // trick 避免巨量成交
 					
 					// 补全缺失K线
@@ -238,14 +245,14 @@ public class Contract {
 		
 		last_quote = quote;
 		
-		if (minklines.size()>1 && last_kline.getIndex() != minkline.getIndex() ) {
+		if (minklines.size()>0 && last_kline.getIndex() != minkline.getIndex() ) {
 			last_kline = minkline;
 		}
 		
 		minklines.put(new Long(minklineindex), minkline);
 
 		StringBuilder line = new StringBuilder(512);
-		line.append(this.toString());	
+		line.append(minkline.toString());	
 		if(quote.QTotalQty - last_quote.QTotalQty > 0) {
 			line.append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
 		}
@@ -267,6 +274,17 @@ public class Contract {
 		TimeZone tz = TimeZone.getTimeZone("Asia/Shanghai");
 		boolean inDs = tz.inDaylightTime(new Date());
 		logger.debug("inDaylightTime:" + inDs);
+		
+		
+		String filename = "minkline.HKEX.HSI.1801";
+		File dataDir = new File("data");		
+		Contract c = new Contract("HKEX.HSI.1801");
+		c.LoadKLineFile(dataDir, filename);
+		logger.debug("c.minklines.size():"+c.minklines.size());
+		for(KLine k:c.minklines.values())
+		{
+			logger.debug(k.toString());
+		}
 	}
 
 }

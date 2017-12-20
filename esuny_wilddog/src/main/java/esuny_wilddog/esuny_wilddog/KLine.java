@@ -1,6 +1,25 @@
 package esuny_wilddog.esuny_wilddog;
 
-public class KLine implements Serializable {
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.ArrayList;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class KLine implements java.io.Serializable{
+	
+	static Logger logger = LoggerFactory.getLogger(KLine.class.getName());
+	
+	 /**
+	 * 序列化ID
+	 */
+	private static final long serialVersionUID = -1379471012870499231L;
+
 	static final int KLINECAPACITY = 60 * 24;
 
 	public String contractUID;
