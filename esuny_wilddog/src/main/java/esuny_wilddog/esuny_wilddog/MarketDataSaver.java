@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.common.util.BufferUtil;
 import net.jtap.*;
 
 import com.wilddog.client.SyncReference;
@@ -31,10 +30,6 @@ public class MarketDataSaver {
 	// 行情写文件 数据缓冲区
 	static final Map<String, BufferedWriter> dataWriterMap = new HashMap<String, BufferedWriter>();
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueue = new LinkedBlockingDeque<TapAPIQuoteWhole>();
-
-	// K线写文件 数据缓冲区
-	static final Map<String, BufferedWriter> klineWriterMap = new HashMap<String, BufferedWriter>();
-	static final BlockingQueue<KLine> klineQueue = new LinkedBlockingDeque<KLine>();
 	
 	// 行情计算 数据缓冲区
 	static final BlockingQueue<TapAPIQuoteWhole> marketDataQueueCalc = new LinkedBlockingDeque<TapAPIQuoteWhole>();
@@ -100,53 +95,6 @@ public class MarketDataSaver {
 				}
 			}
 			dataWriterMap.clear();
-		}
-	}
-
-	private static class SaveKLineThread implements Runnable {
-
-		// @Override
-		public void run() {
-		   boolean isFileExist = false;
-		   
-			while (!requestStop) {
-				
-				KLine kline = null;
-				try {
-					kline = klineQueue.take();
-				} catch (InterruptedException e) {
-				}
-				if (kline == null)
-					continue;
-				
-				try {
-					File file = new File(dataDir, "minkline." + kline.contractUID);
-
-					if (file.exists()) { // 文件是否存在
-						isFileExist = true;
-						FileOutputStream fos = new FileOutputStream(file, true);
-						ObjectOutputStream oos = new ObjectOutputStream(fos);
-						
-						long pos = 0;
-						if (isFileExist) {
-							pos = fos.getChannel().position() - 4;// 追加的时候去掉头部aced 0005
-							fos.getChannel().truncate(pos);
-						}
-						oos.writeObject(kline);
-						oos.close();
-					} else {// 文件不存在
-						file.createNewFile();
-
-						FileOutputStream fos = new FileOutputStream(file, true);
-						ObjectOutputStream oos = new ObjectOutputStream(fos);
-						oos.writeObject(kline);
-						oos.close();
-					}
-				} catch (Exception e) {
-					logger.error(e.toString());
-				}
-			}
-			logger.info("KLine Saver Thread exiting...");
 		}
 	}
 
@@ -249,11 +197,9 @@ public class MarketDataSaver {
 		public void run() {
 
 			while (!requestStop) {
-				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
 				try {
 					quote = marketDataQueueCalc.take();
-					queueLength = marketDataQueueCalc.size();
 				} catch (InterruptedException e) {
 				}
 				if (quote == null)
@@ -325,9 +271,8 @@ public class MarketDataSaver {
 		// 初始化合约集合
 		for (int i = 0; i < ids.length; i++) {
 			Contract c = new Contract(ids[i]);
-			// TODO 加载K线文件
-			c.LoadKLineFile(dataDir, "minkline." + ids[i]);
-			contractsMap.put(ids[i], c);	
+			c.deserializeMinKLines(dataDir, "minkline." + ids[i]);
+			contractsMap.put(ids[i], c);
 		}
 
 		// 初始化 QuoteApi
@@ -480,14 +425,6 @@ public class MarketDataSaver {
 		calculateThread.setDaemon(true);
 		calculateThread.start();
 
-		// K线写文件
-		logger.info("启动线程K线写文件..." + dataDir.getAbsolutePath());
-		SaveKLineThread klineSaver = new SaveKLineThread();
-		Thread klineSaverThread = new Thread(klineSaver);
-		klineSaverThread.setName("KLine data saver thread");
-		klineSaverThread.setDaemon(true);
-		klineSaverThread.start();
-
 		{
 			// 查询服务器支持的品种
 			logger.info("查询服务器支持的品种 Query commodity ...");
@@ -542,14 +479,9 @@ public class MarketDataSaver {
 			int count = dataCount.getAndSet(0);
 			logger.info(dateFormat.format(date) + " Market data receieved: " + count);
 			
-			// 定时存文件
+			// TODO 待改进 定时序列化分钟K线
 			for (Contract c : contractsMap.values()) {
-				try {
-					if (c.last_kline.getIndex() != 0) {
-						klineQueue.put(c.last_kline);
-					}
-				} catch (Exception e) {
-				}
+				c.serializeMinKLines(dataDir, "minkline." + c.contractUID);
 			}
 			
 			// TODO 定时重启  待定05:30

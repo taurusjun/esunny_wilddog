@@ -2,9 +2,10 @@ package esuny_wilddog.esuny_wilddog;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -26,9 +27,6 @@ public class Contract {
 	
 	// 合约名称 NYMEX.CL.1801
 	String contractUID;
-
-	// 全部品种交易时间信息
-	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime = new HashMap<String, ArrayList<LocalTime>>();
 	
 	// 保存上一笔行情,计算逐笔成交
 	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
@@ -40,6 +38,8 @@ public class Contract {
 	// 日K
 	private KLine daykline = new KLine();
 
+	// 全部品种交易时间信息
+	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime = new HashMap<String, ArrayList<LocalTime>>();
 	static void InitTradeTime() {
 		ArrayList<LocalTime> array = new ArrayList<LocalTime>();
 		Boolean isDST = false;
@@ -105,26 +105,36 @@ public class Contract {
 		commodityTradeTime.put("SGX.CN", array);
 	}
 
-	// 从文件恢复K线
-	void LoadKLineFile(File dataDir, String filename){
+	// 序列化分钟K线
+	void serializeMinKLines(File dataDir, String filename) {
+		try {
+			File file = new File(dataDir, filename);
+			FileOutputStream fos;
+			fos = new FileOutputStream(file, true);
+			ObjectOutputStream oos = new ObjectOutputStream(fos);
+			oos.writeObject(this.minklines);
+			oos.close();
+		} catch (IOException e) {
+			logger.error(e.getMessage());
+		}
+	}
+
+//	@SuppressWarnings("unchecked")
+	// 反序列化分钟K线
+	void deserializeMinKLines(File dataDir, String filename) {
 		try {
 			File file = new File(dataDir, filename);
 			FileInputStream fis = new FileInputStream(file);
 			ObjectInputStream ois = new ObjectInputStream(fis);
-			while (fis.available() > 0) {
-				KLine k = (KLine) ois.readObject();
-				minklines.put(new Long(k.getIndex()), k);
-			}
+			LinkedHashMap<Long, KLine> readObject = (LinkedHashMap<Long, KLine>) ois.readObject();
+			this.minklines = readObject;
 			ois.close();
-			logger.info("minklines.size():"+minklines.size());
-		} catch (FileNotFoundException e) {
-			logger.error(dataDir + filename + ":" + e.getMessage());
 		} catch (IOException e) {
-			logger.error(dataDir + filename + ":" + e.getMessage());
+			logger.error(e.getMessage());
 		} catch (ClassNotFoundException e) {
-			logger.error(dataDir + filename + ":" + e.getMessage());
+			logger.error(e.getMessage());
 		}
-		
+
 	}
 	
 	static final int MAX_CONTRACT_NUM = 50;
@@ -276,15 +286,16 @@ public class Contract {
 		logger.debug("inDaylightTime:" + inDs);
 		
 		
-		String filename = "minkline.HKEX.HSI.1801";
+		String filename = "new.minkline.HKEX.HSI.1801";
 		File dataDir = new File("data");		
 		Contract c = new Contract("HKEX.HSI.1801");
-		c.LoadKLineFile(dataDir, filename);
-		logger.debug("c.minklines.size():"+c.minklines.size());
+		c.deserializeMinKLines(dataDir, filename);
+		logger.debug("deserializeMinKLines:"+c.minklines.size());
 		for(KLine k:c.minklines.values())
 		{
 			logger.debug(k.toString());
 		}
+	
 	}
 
 }
