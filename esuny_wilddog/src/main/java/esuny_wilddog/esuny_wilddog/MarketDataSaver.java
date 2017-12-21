@@ -48,13 +48,16 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
-				try {
-					quote = marketDataQueue.take();
-					queueLength = marketDataQueue.size();
-				} catch (InterruptedException e) {
-				}
+				quote = marketDataQueue.poll();
+				queueLength = marketDataQueue.size();
 				if (quote == null)
+				{
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+					}
 					continue;
+				}
 				try {
 					String contractUID = quote.Contract.Commodity.ExchangeNo + "."
 							+ quote.Contract.Commodity.CommodityNo + "." + quote.Contract.ContractNo1;
@@ -86,7 +89,7 @@ public class MarketDataSaver {
 					e.printStackTrace();
 				}
 			}
-			logger.info("DataSaver Thread exiting...");
+			
 			for (BufferedWriter writer : dataWriterMap.values()) {
 				try {
 					writer.flush();
@@ -95,6 +98,8 @@ public class MarketDataSaver {
 				}
 			}
 			dataWriterMap.clear();
+			
+			logger.info(this.getClass().getName() + " exiting...");			
 		}
 	}
 
@@ -114,8 +119,7 @@ public class MarketDataSaver {
 				try {
 					Thread.sleep(400);
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					logger.error(e.toString());
 				}
 
 				Collection<TapAPIQuoteWhole> c = marketDataMap.values();
@@ -188,7 +192,8 @@ public class MarketDataSaver {
 
 			SyncReference.goOffline();
 			marketDataMap.clear();
-			logger.info("Wilddog Write Thread exiting...");
+
+			logger.info(this.getClass().getName() + " exiting...");
 		}
 	}
 
@@ -197,14 +202,19 @@ public class MarketDataSaver {
 		public void run() {
 
 			while (!requestStop) {
+				
 				TapAPIQuoteWhole quote = null;
-				try {
-					quote = marketDataQueueCalc.take();
-				} catch (InterruptedException e) {
-				}
+				quote = marketDataQueueCalc.poll();
+				
 				if (quote == null)
+				{
+					try {
+						Thread.sleep(50);
+					} catch (InterruptedException e) {
+					}
 					continue;
-
+				}
+				
 				String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo
 						+ "." + quote.Contract.ContractNo1;
 
@@ -215,10 +225,9 @@ public class MarketDataSaver {
 				}
 				c.UpdateQuote(quote);
 			}
-
-			logger.info("Calculate Thread exiting...");
-
 			marketDataQueueCalc.clear();
+			
+			logger.info(this.getClass().getName() + " exiting...");
 		}
 	}
 
@@ -320,21 +329,18 @@ public class MarketDataSaver {
 			// @Override
 			public void OnRspSubscribeQuote(int sessionID, int errorCode, byte isLast, TapAPIQuoteWhole info) {
 				dataCount.incrementAndGet();
-				try {
-					// 用于写文件
-					marketDataQueue.put(info);
-					// 用于计算
-					marketDataQueueCalc.put(info);
+				// 用于写文件
+				marketDataQueue.add(info);
+				// 用于计算
+				marketDataQueueCalc.add(info);
 
-					// 用于写野狗 行情分拣
-					String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
-							+ "." + info.Contract.ContractNo1;
-					marketDataMap.put(contractUID, info);
+				// 用于写野狗 行情分拣
+				String contractUID = info.Contract.Commodity.ExchangeNo + "." + info.Contract.Commodity.CommodityNo
+						+ "." + info.Contract.ContractNo1;
+				marketDataMap.put(contractUID, info);
 
-					logger.info("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice + " "
-							+ info.QLastQty);
-				} catch (InterruptedException e) {
-				}
+				logger.info("订阅成功" + contractUID + " " + info.DateTimeStamp + " " + info.QLastPrice + " "
+						+ info.QLastQty);
 			}
 
 			// @Override
@@ -377,6 +383,7 @@ public class MarketDataSaver {
 		// ShutdownHook
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
+				logger.info("调用钩子 ShutdownHook");
 				requestStop = true;
 				for (BufferedWriter writer : dataWriterMap.values()) {
 					try {
@@ -392,8 +399,7 @@ public class MarketDataSaver {
 					} catch (Exception e) {
 					}
 				}
-
-				logger.info("ShutdownHook");
+				logger.info("钩子执行完毕");
 			}
 		});
 
@@ -402,28 +408,28 @@ public class MarketDataSaver {
 			ThreadFuncWilddogWrite.urlWilddogSync = wilddogURL;
 		logger.info("启动线程行情写入云端..." + ThreadFuncWilddogWrite.urlWilddogSync);
 		ThreadFuncWilddogWrite threadFuncWilddogWrite = new ThreadFuncWilddogWrite();
-		Thread writeThread = new Thread(threadFuncWilddogWrite);
-		writeThread.setName("Market data wilddog write thread");
-		writeThread.setDaemon(true);
-		writeThread.start();
+		Thread wilddogWriteThread = new Thread(threadFuncWilddogWrite);
+		wilddogWriteThread.setName("wilddogWriteThread");
+//		wilddogWriteThread.setDaemon(true);
+		wilddogWriteThread.start();
 
 		// 行情写文件
 		logger.info("启动线程行情写文件..." + dataDir.getAbsolutePath());
 		logger.info("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
 		dataDir.mkdirs();
 		SaveQuoteThread saver = new SaveQuoteThread();
-		Thread saverThread = new Thread(saver);
-		saverThread.setName("Quote data saver thread");
-		saverThread.setDaemon(true);
-		saverThread.start();
+		Thread quoteSaverThread = new Thread(saver);
+		quoteSaverThread.setName("quoteSaverThread");
+//		quoteSaverThread.setDaemon(true);
+//		quoteSaverThread.start();
 
 		// 行情计算 K线 分时
 		logger.info("启动线程行情计算...");
 		ThreadFuncCalculateQuote threadFuncCalculateQuote = new ThreadFuncCalculateQuote();
 		Thread calculateThread = new Thread(threadFuncCalculateQuote);
-		calculateThread.setName("Market data calculate thread");
-		calculateThread.setDaemon(true);
-		calculateThread.start();
+		calculateThread.setName("calculateThread");
+//		calculateThread.setDaemon(true);
+//		calculateThread.start();
 
 		{
 			// 查询服务器支持的品种
@@ -467,12 +473,11 @@ public class MarketDataSaver {
 				mdApi.SubscribeQuote(contract);
 			} catch (Exception e) {
 				logger.error(e.getMessage());
-				// e.printStackTrace();
 			}
 		}
 	
 		while (!requestStop) {
-			Thread.sleep(60 * 1000);
+			Thread.sleep(10 * 1000);
 			
 			// 行情接收数量统计 
 			Date date = new Date();
@@ -489,8 +494,9 @@ public class MarketDataSaver {
 			calendar.setTime(date);
 			int hour = calendar.get(Calendar.HOUR_OF_DAY);
 			int minute = calendar.get(Calendar.MINUTE);
-			if (count == 0 && hour >= 23 && minute >= 59) {
-				logger.info("Market is closed, exiting..." + date);
+			// if (count == 0 && hour == 5 && minute >= 30) {
+			if (hour >= 17 && minute >= 00) {
+				logger.info("日常定时重启" + date);
 				requestStop = true;
 			}
 			
@@ -498,14 +504,13 @@ public class MarketDataSaver {
 				break;
 		}
 
-		Date date = new Date();
 		int count = dataCount.getAndSet(0);
 		if (count > 0)
-			logger.info(dateFormat.format(date) + " Market data receieved: " + count);
+			logger.info(dateFormat.format( new Date()) + " quote receieved: " + count);
 
 		mdApi.Close();
-		/**/
-		logger.info(dateFormat.format(date) + " main EXIT");
+
+		logger.info(" main() EXIT");
 	}
 
 	// 配置文件

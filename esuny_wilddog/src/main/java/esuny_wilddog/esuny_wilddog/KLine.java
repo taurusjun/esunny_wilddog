@@ -41,7 +41,8 @@ public class KLine implements java.io.Serializable{
 		this.TotalQty = 0;
 	}
 
-	KLine(long index) {
+	KLine(String contractUID, long index) {
+		this.contractUID = contractUID;
 		this.index = index;
 		this.OpenPx = 0;
 		this.HighPx = 0;

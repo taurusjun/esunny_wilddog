@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.TimeZone;
 
 import org.slf4j.Logger;
@@ -24,20 +25,17 @@ import net.jtap.TapAPIQuoteWhole;
 
 public class Contract {
 	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
+	static final int MAX_CONTRACT_NUM = 50;
 	
 	// 合约名称 NYMEX.CL.1801
 	String contractUID;
 	
-	// 保存上一笔行情,计算逐笔成交
-	TapAPIQuoteWhole last_quote = new TapAPIQuoteWhole();
-	public KLine last_kline = new KLine();
-	
-	// 全天分钟K线 分时线 
+	// 全天分钟K线 分时线 下标为整数,用时间表示,不含日期 格式"hhMM"
 	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
 
-	// 日K
-	private KLine daykline = new KLine();
-
+	// 
+	private LinkedList<KLine> minklinesList = new LinkedList<KLine>();
+	
 	// 全部品种交易时间信息
 	static final HashMap<String, ArrayList<LocalTime>> commodityTradeTime = new HashMap<String, ArrayList<LocalTime>>();
 	static void InitTradeTime() {
@@ -105,6 +103,7 @@ public class Contract {
 		commodityTradeTime.put("SGX.CN", array);
 	}
 
+	// TODO 待改进 存在问题 写冗余
 	// 序列化分钟K线
 	void serializeMinKLines(File dataDir, String filename) {
 		try {
@@ -134,10 +133,7 @@ public class Contract {
 		} catch (ClassNotFoundException e) {
 			logger.error(e.getMessage());
 		}
-
 	}
-	
-	static final int MAX_CONTRACT_NUM = 50;
 
 	Contract(String contractUID){
 		this.contractUID = contractUID;
@@ -186,59 +182,42 @@ public class Contract {
 	 * 
 	 */
 	public static Long getFirstMinKLineIndex(String commodityUID,  String strDateTimestamp) {
-		//TODO T
+		//TODO 
 		Long nTradeDay = getTradeDay(commodityUID, strDateTimestamp);
 		LocalTime lt = LocalTime.now();
 		return new Long(0);
 	}
-	
+
 	public void UpdateQuote(TapAPIQuoteWhole quote) {
 		// 品种ID
 		String commodityUID = quote.Contract.Commodity.ExchangeNo 
 				+ "." + quote.Contract.Commodity.CommodityNo;
-		
 
-		
 		// 第一根K线下标
 		long firstminklineIndex = getFirstMinKLineIndex(commodityUID, quote.DateTimeStamp);
+		
 		// 当前分钟K下标
 		long minklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, 0);
 		
 		KLine minkline = minklines.get(new Long(minklineindex));
 		if (minkline == null) {
-			// 合约ID
 			String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo + "."
 					+ quote.Contract.ContractNo1;		
 			
-			minkline = new KLine(new Long(minklineindex));
-			minkline.contractUID = contractUID;
+			minkline = new KLine(contractUID, new Long(minklineindex));
 		}
-//		logger.debug("firstminklineIndex:"+firstminklineIndex + " minklineindex:"+minklineindex);
-		// 分钟K线首次更新 openpx需特别处理
-		if (minklineindex == firstminklineIndex) {
-			if (minkline.getOpenPx() == 0) {
-				minkline.setOpenPx( quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice);			
-			}		
-		} else if (minklineindex > firstminklineIndex) {
-			if (minkline.getOpenPx() == 0) {
-				long preminklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, -1);
-				KLine preminkline = minklines.get(preminklineindex);
-				// TODO 处理行情丢失问题
-				if (preminkline == null || preminkline.getLastPx() == 0) {
-					minkline.setOpenPx(quote.QPreClosingPrice);
-					logger.debug("quote.QPreClosingPrice:"+quote.QPreClosingPrice);
-					last_quote = quote; // trick 避免巨量成交
-					
-					// 补全缺失K线
-					// firstminklineIndex --> preminklineindex
-					// minklines.put(new Long(minklineindex), minkline);
-				} else
-					minkline.setOpenPx(preminkline.getLastPx() > 0 ? preminkline.getLastPx() : quote.QOpeningPrice);
-			}
-		} else if (minklineindex < firstminklineIndex) {
-			logger.error(
-					"ERROR: minklineindex[" + minklineindex + "] < firstminklineIndex[" + firstminklineIndex + "]");
-			return;
+		
+		// 分钟K线开盘价 优先取前一分钟K线的最新价 其次当天开盘价 最次昨收价		
+		// TODO 序列化分钟K线 避免行情中断
+		long preminklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, -1);
+		KLine preminkline = minklines.get(preminklineindex);
+		if (preminkline == null) {
+			preminkline = new KLine();
+		}
+		
+		if (minkline.getOpenPx() == 0) {
+			minkline.setOpenPx(preminkline.getLastPx() > 0 ? preminkline.getLastPx()
+					: (quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice));
 		}
 
 		if (minkline.getHighPx() < quote.QLastPrice)
@@ -249,25 +228,19 @@ public class Contract {
 
 		minkline.setLastPx(quote.QLastPrice);
 
-		minkline.setVolume(minkline.getVolume() + quote.QTotalQty - last_quote.QTotalQty);
+		// 模拟逐笔成交
+		long deltal_qty = quote.QTotalQty - minkline.getTotalQty();
 		
+		// 分钟成交量
+		minkline.setVolume(quote.QTotalQty - preminkline.getTotalQty());
+		
+		// 总成交量
 		minkline.setTotalQty(quote.QTotalQty);
-		
-		last_quote = quote;
-		
-		if (minklines.size()>0 && last_kline.getIndex() != minkline.getIndex() ) {
-			last_kline = minkline;
-		}
-		
+				
 		minklines.put(new Long(minklineindex), minkline);
-
-		StringBuilder line = new StringBuilder(512);
-		line.append(minkline.toString());	
-		if(quote.QTotalQty - last_quote.QTotalQty > 0) {
-			line.append(" deal:").append(quote.QTotalQty - last_quote.QTotalQty);
-		}
 		
-		logger.debug(line.toString());
+		// TODO 调试K线
+		logger.debug(minkline.toString() + ((deltal_qty > 0) ? (" delta:" + deltal_qty) : ""));
 	}
 
 	
