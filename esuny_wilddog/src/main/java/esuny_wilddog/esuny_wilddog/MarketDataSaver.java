@@ -429,7 +429,7 @@ public class MarketDataSaver {
 		Thread calculateThread = new Thread(threadFuncCalculateQuote);
 		calculateThread.setName("calculateThread");
 //		calculateThread.setDaemon(true);
-//		calculateThread.start();
+		calculateThread.start();
 
 		{
 			// 查询服务器支持的品种
@@ -477,7 +477,7 @@ public class MarketDataSaver {
 		}
 	
 		while (!requestStop) {
-			Thread.sleep(10 * 1000);
+			Thread.sleep(60 * 1000);
 			
 			// 行情接收数量统计 
 			Date date = new Date();
@@ -494,8 +494,8 @@ public class MarketDataSaver {
 			calendar.setTime(date);
 			int hour = calendar.get(Calendar.HOUR_OF_DAY);
 			int minute = calendar.get(Calendar.MINUTE);
-			// if (count == 0 && hour == 5 && minute >= 30) {
-			if (hour >= 17 && minute >= 00) {
+			 if (count == 0 && hour == 5 && minute >= 30) {
+//			if (hour >= 17 && minute >= 00) {
 				logger.info("日常定时重启" + date);
 				requestStop = true;
 			}

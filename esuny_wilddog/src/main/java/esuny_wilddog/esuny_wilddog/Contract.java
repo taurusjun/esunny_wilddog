@@ -14,7 +14,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.TimeZone;
 
@@ -27,13 +27,10 @@ public class Contract {
 	static Logger logger = LoggerFactory.getLogger(Contract.class.getName());
 	static final int MAX_CONTRACT_NUM = 50;
 	
-	// 合约名称 NYMEX.CL.1801
+	// 合约名称 例如:NYMEX.CL.1801
 	String contractUID;
-	
-	// 全天分钟K线 分时线 下标为整数,用时间表示,不含日期 格式"hhMM"
-	private LinkedHashMap<Long, KLine> minklines = new LinkedHashMap<Long, KLine>(KLine.KLINECAPACITY);
 
-	// 
+	// 分钟K
 	private LinkedList<KLine> minklinesList = new LinkedList<KLine>();
 	
 	// 全部品种交易时间信息
@@ -109,9 +106,9 @@ public class Contract {
 		try {
 			File file = new File(dataDir, filename);
 			FileOutputStream fos;
-			fos = new FileOutputStream(file, true);
+			fos = new FileOutputStream(file, false);
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
-			oos.writeObject(this.minklines);
+			oos.writeObject(this.minklinesList);
 			oos.close();
 		} catch (IOException e) {
 			logger.error(e.getMessage());
@@ -125,8 +122,7 @@ public class Contract {
 			File file = new File(dataDir, filename);
 			FileInputStream fis = new FileInputStream(file);
 			ObjectInputStream ois = new ObjectInputStream(fis);
-			LinkedHashMap<Long, KLine> readObject = (LinkedHashMap<Long, KLine>) ois.readObject();
-			this.minklines = readObject;
+			this.minklinesList = (LinkedList<KLine>) ois.readObject();
 			ois.close();
 		} catch (IOException e) {
 			logger.error(e.getMessage());
@@ -142,14 +138,14 @@ public class Contract {
 	/**
 	 * @param strDateTimestamp
 	 */
-	public static long getMinKLineIndex(String contractUID, String strDateTimestamp) {
-		return getMinKLineIndex(contractUID, strDateTimestamp, 0);
+	public static long getMinKLineIndex(String strDateTimestamp) {
+		return getMinKLineIndex(strDateTimestamp, 0);
 	}
 
 	/**
 	 * 取分钟K下标,偏移n分钟,负数向前,零当前分钟,正数向后
 	 */
-	public static long getMinKLineIndex(String contractUID, String strDateTimestamp, Integer n) {
+	public static long getMinKLineIndex(String strDateTimestamp, Integer offset_mins) {
 		final DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
 		long l = 0;
@@ -157,8 +153,7 @@ public class Contract {
 		Date dd = new Date();
 		try {
 			d = df.parse(strDateTimestamp);
-			// TODO 需完善交易时间段判断
-			dd = new Date(d.getTime() + n * 60 * 1000);	
+			dd = new Date(d.getTime() + offset_mins * 60 * 1000);	
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}
@@ -166,84 +161,30 @@ public class Contract {
 		return l;
 	}
 	
-	/**
-	 * 根据时间戳判断品种所属交易日 
-	 * 
-	 */
-	public static Long getTradeDay(String commodityUID, String strDateTimestamp) {
-		// TODO
-		LocalDate ld = LocalDate.now();
-
-		return new Long(ld.getYear() * 10000 + ld.getMonthValue() * 100 + ld.getDayOfMonth());
-	}
-	
-	/**
-	 * 根据时间戳判断品种交易日第一根分钟K线下标
-	 * 
-	 */
-	public static Long getFirstMinKLineIndex(String commodityUID,  String strDateTimestamp) {
-		//TODO 
-		Long nTradeDay = getTradeDay(commodityUID, strDateTimestamp);
-		LocalTime lt = LocalTime.now();
-		return new Long(0);
-	}
-
 	public void UpdateQuote(TapAPIQuoteWhole quote) {
-		// 品种ID
-		String commodityUID = quote.Contract.Commodity.ExchangeNo 
-				+ "." + quote.Contract.Commodity.CommodityNo;
+		// 时间戳转分钟K下标
+		long minklineindex = getMinKLineIndex(quote.DateTimeStamp);
 
-		// 第一根K线下标
-		long firstminklineIndex = getFirstMinKLineIndex(commodityUID, quote.DateTimeStamp);
-		
-		// 当前分钟K下标
-		long minklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, 0);
-		
-		KLine minkline = minklines.get(new Long(minklineindex));
-		if (minkline == null) {
-			String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo + "."
-					+ quote.Contract.ContractNo1;		
-			
-			minkline = new KLine(contractUID, new Long(minklineindex));
+		// 访问并删除最后一个元素
+		KLine lastminkline = minklinesList.pollLast();
+		if (lastminkline == null) {		
+			lastminkline = new KLine(quote);
 		}
 		
-		// 分钟K线开盘价 优先取前一分钟K线的最新价 其次当天开盘价 最次昨收价		
-		// TODO 序列化分钟K线 避免行情中断
-		long preminklineindex = getMinKLineIndex(commodityUID, quote.DateTimeStamp, -1);
-		KLine preminkline = minklines.get(preminklineindex);
-		if (preminkline == null) {
-			preminkline = new KLine();
+		// quote lastminkline 落在相同时间区间
+		if (lastminkline.getIndex() == minklineindex) {
+			lastminkline.update(quote);
+			minklinesList.offer(lastminkline); // 将元素添加到尾部
+		} else if (lastminkline.getIndex() < minklineindex) {
+			// quote lastminkline 落在不同时间区间 
+			KLine kline = new KLine(lastminkline, quote);
+			kline.update(quote);
+			minklinesList.offer(lastminkline); // 将元素添加到尾部
+			minklinesList.offer(kline);
 		}
-		
-		if (minkline.getOpenPx() == 0) {
-			minkline.setOpenPx(preminkline.getLastPx() > 0 ? preminkline.getLastPx()
-					: (quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice));
-		}
 
-		if (minkline.getHighPx() < quote.QLastPrice)
-			minkline.setHighPx(quote.QLastPrice);
-
-		if (minkline.getLowPx() == 0 || minkline.getLowPx() > quote.QLastPrice)
-			minkline.setLowPx (quote.QLastPrice);
-
-		minkline.setLastPx(quote.QLastPrice);
-
-		// 模拟逐笔成交
-		long deltal_qty = quote.QTotalQty - minkline.getTotalQty();
-		
-		// 分钟成交量
-		minkline.setVolume(quote.QTotalQty - preminkline.getTotalQty());
-		
-		// 总成交量
-		minkline.setTotalQty(quote.QTotalQty);
-				
-		minklines.put(new Long(minklineindex), minkline);
-		
-		// TODO 调试K线
-		logger.debug(minkline.toString() + ((deltal_qty > 0) ? (" delta:" + deltal_qty) : ""));
 	}
 
-	
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		LocalDate today = LocalDate.now();
@@ -260,15 +201,16 @@ public class Contract {
 		
 		
 		String filename = "new.minkline.HKEX.HSI.1801";
-		File dataDir = new File("data");		
+		File dataDir = new File("data");
 		Contract c = new Contract("HKEX.HSI.1801");
 		c.deserializeMinKLines(dataDir, filename);
-		logger.debug("deserializeMinKLines:"+c.minklines.size());
-		for(KLine k:c.minklines.values())
-		{
+		logger.debug("deserializeMinKLines:" + c.minklinesList.size());
+		Iterator<KLine> it = c.minklinesList.iterator();
+		while (it.hasNext()) {
+			KLine k = (KLine)it.next();
 			logger.debug(k.toString());
 		}
-	
+
 	}
 
 }
