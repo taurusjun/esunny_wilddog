@@ -480,9 +480,8 @@ public class MarketDataSaver {
 			Thread.sleep(60 * 1000);
 			
 			// 行情接收数量统计 
-			Date date = new Date();
 			int count = dataCount.getAndSet(0);
-			logger.info(dateFormat.format(date) + " Market data receieved: " + count);
+			logger.info(" Market data receieved: " + count);
 			
 			// TODO 待改进 定时序列化分钟K线
 			for (Contract c : contractsMap.values()) {
@@ -490,6 +489,7 @@ public class MarketDataSaver {
 			}
 			
 			// TODO 定时重启  待定05:30
+			Date date = new Date();
 			Calendar calendar = Calendar.getInstance();
 			calendar.setTime(date);
 			int hour = calendar.get(Calendar.HOUR_OF_DAY);
