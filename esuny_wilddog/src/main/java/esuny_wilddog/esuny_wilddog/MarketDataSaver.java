@@ -40,7 +40,7 @@ public class MarketDataSaver {
 	// 合约集合
 	static final Map<String, Contract> contractsMap = new HashMap<String, Contract>(Contract.MAX_CONTRACT_NUM);
 
-	private static class SaveQuoteThread implements Runnable {
+	private static class ThreadFuncSaveQuoteFile implements Runnable {
 
 		// @Override
 		public void run() {
@@ -103,7 +103,7 @@ public class MarketDataSaver {
 		}
 	}
 
-	private static class ThreadFuncWilddogWrite implements Runnable {
+	private static class ThreadFuncWriteWilddog implements Runnable {
 		static String urlWilddogSync = "https://wd0980993345vffczg.wilddogio.com";
 
 		// @Override
@@ -254,7 +254,7 @@ public class MarketDataSaver {
 			return "";
 		return quantityFormat.format(qty);
 	}
-
+	// 格式化 
 	//
 	public static void main(String[] args) throws Throwable {
 
@@ -405,9 +405,9 @@ public class MarketDataSaver {
 
 		// 行情写野狗
 		if (!wilddogURL.isEmpty())
-			ThreadFuncWilddogWrite.urlWilddogSync = wilddogURL;
-		logger.info("启动线程行情写入云端..." + ThreadFuncWilddogWrite.urlWilddogSync);
-		ThreadFuncWilddogWrite threadFuncWilddogWrite = new ThreadFuncWilddogWrite();
+			ThreadFuncWriteWilddog.urlWilddogSync = wilddogURL;
+		logger.info("启动线程行情写入云端..." + ThreadFuncWriteWilddog.urlWilddogSync);
+		ThreadFuncWriteWilddog threadFuncWilddogWrite = new ThreadFuncWriteWilddog();
 		Thread wilddogWriteThread = new Thread(threadFuncWilddogWrite);
 		wilddogWriteThread.setName("wilddogWriteThread");
 //		wilddogWriteThread.setDaemon(true);
@@ -417,7 +417,7 @@ public class MarketDataSaver {
 		logger.info("启动线程行情写文件..." + dataDir.getAbsolutePath());
 		logger.info("主力合约清单: " + ids.length + " " + Arrays.asList(ids));
 		dataDir.mkdirs();
-		SaveQuoteThread saver = new SaveQuoteThread();
+		ThreadFuncSaveQuoteFile saver = new ThreadFuncSaveQuoteFile();
 		Thread quoteSaverThread = new Thread(saver);
 		quoteSaverThread.setName("quoteSaverThread");
 //		quoteSaverThread.setDaemon(true);
