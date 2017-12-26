@@ -24,6 +24,7 @@ public class KLine implements java.io.Serializable{
 
 	public String contractUID;
 	private long index; // 时间索引
+	private double PreClosePx; // 昨收
 	private double OpenPx; // 开
 	private double HighPx; // 高
 	private double LowPx; // 低
@@ -44,6 +45,7 @@ public class KLine implements java.io.Serializable{
 	KLine(String contractUID, long index) {
 		this.contractUID = contractUID;
 		this.index = index;
+		this.PreClosePx = 0;
 		this.OpenPx = 0;
 		this.HighPx = 0;
 		this.LowPx = 0;
@@ -52,11 +54,12 @@ public class KLine implements java.io.Serializable{
 		this.TotalQty = 0;
 	}
 
-	public KLine(String contractUID, long index, double openPx, double highPx, double lowPx, double lastPx, long volume,
+	public KLine(String contractUID, long index, double preClosePx, double openPx, double highPx, double lowPx, double lastPx, long volume,
 			long totalQty) {
 		super();
 		this.contractUID = contractUID;
 		this.index = index;
+		PreClosePx = preClosePx;
 		OpenPx = openPx;
 		HighPx = highPx;
 		LowPx = lowPx;
@@ -83,6 +86,7 @@ public class KLine implements java.io.Serializable{
 		
 		this.contractUID = contractUID;
 		this.setIndex( index);
+		this.setPreClosePx(quote.QPreClosingPrice);
 		update(quote);
 	}
 	
@@ -104,6 +108,7 @@ public class KLine implements java.io.Serializable{
 		
 		this.contractUID = contractUID;
 		this.setIndex( index);
+		this.setPreClosePx(quote.QPreClosingPrice);
 		
 			// 用上一根K初始化当前K
 		if (this.getIndex() > preKLine.getIndex()) {
@@ -116,7 +121,7 @@ public class KLine implements java.io.Serializable{
 
 	}
 	
-	public void update(TapAPIQuoteWhole quote) {
+	public void update(TapAPIQuoteWhole quote) {	
 		if (this.getOpenPx() == 0) {
 			this.setOpenPx(quote.QOpeningPrice > 0 ? quote.QOpeningPrice : quote.QPreClosingPrice);
 		}
@@ -143,7 +148,7 @@ public class KLine implements java.io.Serializable{
 	
 	@Override
 	public String toString() {
-		return "KLine [contractUID=" + contractUID + ", index=" + index + ", OpenPx=" + OpenPx + ", HighPx=" + HighPx
+		return "KLine [contractUID=" + contractUID + ", index=" + index + ", PreClosePx=" + PreClosePx + ", OpenPx=" + OpenPx + ", HighPx=" + HighPx
 				+ ", LowPx=" + LowPx + ", LastPx=" + LastPx + ", Volume=" + Volume + ", TotalQty=" + TotalQty + "]";
 	}
 
@@ -161,6 +166,14 @@ public class KLine implements java.io.Serializable{
 
 	public void setIndex(long index) {
 		this.index = index;
+	}
+
+	public double getPreClosePx() {
+		return PreClosePx;
+	}
+
+	public void setPreClosePx(double preClosePx) {
+		PreClosePx = preClosePx;
 	}
 
 	public double getOpenPx() {
