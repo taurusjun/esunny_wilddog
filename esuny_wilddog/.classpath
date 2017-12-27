@@ -23,9 +23,9 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry exported="true" kind="con" path="org.eclipse.jdt.USER_LIBRARY/Referenced Libraries"/>
-	<classpathentry kind="lib" path="C:/work/eclipse-workspace/jtap_trial-win32_x86-quote-9.3.1.1/jars/jtap-examples.jar"/>
-	<classpathentry kind="lib" path="C:/work/eclipse-workspace/jtap_trial-win32_x86-quote-9.3.1.1/jars/jtap-win32_x86-quote-9.3.1.1.jar" sourcepath="src/jtap-win32_x86-quote-9.3.1.1-src"/>
-	<classpathentry kind="lib" path="C:/work/eclipse-workspace/jtap_trial-win32_x86-quote-9.3.1.1/jars/jtap-win32_x86-quote-9.3.1.1-docs.jar"/>
-	<classpathentry kind="lib" path="C:/work/eclipse-workspace/jtap_trial-win32_x86-quote-9.3.1.1/jars/jtrader-common.jar" sourcepath="src/jtrader-common-src"/>
+	<classpathentry kind="lib" path="/root/git/esunny_wilddog/jtap_trial-linux_x64-quote-9.3.1.1/jars/jtap-examples.jar"/>
+	<classpathentry kind="lib" path="/root/git/esunny_wilddog/jtap_trial-linux_x64-quote-9.3.1.1/jars/jtap-linux_x64-quote-9.3.1.1.jar"/>
+	<classpathentry kind="lib" path="/root/git/esunny_wilddog/jtap_trial-linux_x64-quote-9.3.1.1/jars/jtap-linux_x64-quote-9.3.1.1-docs.jar"/>
+	<classpathentry kind="lib" path="/root/git/esunny_wilddog/jtap_trial-linux_x64-quote-9.3.1.1/jars/jtrader-common.jar"/>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>
