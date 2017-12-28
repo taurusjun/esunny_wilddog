@@ -48,14 +48,13 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
-				quote = marketDataQueue.poll();
+				try {
+					quote = marketDataQueue.poll(5L, TimeUnit.SECONDS);
+				} catch (InterruptedException e1) {					
+					e1.printStackTrace();
+				}
 				queueLength = marketDataQueue.size();
-				if (quote == null)
-				{
-					try {
-						Thread.sleep(100);
-					} catch (InterruptedException e) {
-					}
+				if (quote == null) {
 					continue;
 				}
 				try {
@@ -95,6 +94,7 @@ public class MarketDataSaver {
 					writer.flush();
 					writer.close();
 				} catch (Exception e) {
+					logger.error(e.toString());
 				}
 			}
 			dataWriterMap.clear();
@@ -157,10 +157,10 @@ public class MarketDataSaver {
 					childrenMap.put("QBidQty", info.QBidQty[0]); /// < 买量1-20档
 					childrenMap.put("QAskPrice", info.QAskPrice[0]); /// < 卖价1-20档
 					childrenMap.put("QAskQty", info.QAskQty[0]); /// < 卖量1-20档
-					// childrenMap.put("QBidPrice[20]",info.QBidPrice[20]); ///< 买价1-20档
-					// childrenMap.put("QBidQty[20]",info.QBidQty[20]); ///< 买量1-20档
-					// childrenMap.put("QAskPrice[20]",info.QAskPrice[20]); ///< 卖价1-20档
-					// childrenMap.put("QAskQty[20]",info.QAskQty[20]); ///< 卖量1-20档
+					// childrenMap.put("QBidPrice",info.QBidPrice); ///< 买价1-20档
+					// childrenMap.put("QBidQty",info.QBidQty); ///< 买量1-20档
+					// childrenMap.put("QAskPrice",info.QAskPrice); ///< 卖价1-20档
+					// childrenMap.put("QAskQty",info.QAskQty); ///< 卖量1-20档
 					
 					childrenMap.put("QImpliedBidPrice", price2str(info.QImpliedBidPrice)); /// < 隐含买价
 					childrenMap.put("QImpliedBidQty", qty2str(info.QImpliedBidQty)); /// < 隐含买量
@@ -187,7 +187,11 @@ public class MarketDataSaver {
 					String pathString = info.Contract.Commodity.CommodityNo + "/" + info.Contract.ContractNo1;
 					rootMap.put(pathString, childrenMap);
 				}
-				ref.updateChildren(rootMap);
+				try {
+					ref.updateChildren(rootMap);
+				} catch (Exception e) {
+					logger.error(e.toString());
+				}
 			}
 
 			SyncReference.goOffline();
@@ -204,16 +208,14 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				
 				TapAPIQuoteWhole quote = null;
-				quote = marketDataQueueCalc.poll();
+				try {
+					quote = marketDataQueueCalc.poll(1L, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {					// TODO Auto-generated catch block
+					logger.error(e.toString());
+				}
 				
 				if (quote == null)
-				{
-					try {
-						Thread.sleep(50);
-					} catch (InterruptedException e) {
-					}
 					continue;
-				}
 				
 				String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo
 						+ "." + quote.Contract.ContractNo1;
@@ -377,7 +379,12 @@ public class MarketDataSaver {
 		loginAuth.Password = password;
 		loginAuth.ISModifyPassword = JtapConstants.APIYNFLAG_NO;
 		loginAuth.ISDDA = JtapConstants.APIYNFLAG_NO;
-		mdApi.SyncLogin(quoteHost, quotePort, loginAuth);
+		try {
+			mdApi.SyncLogin(quoteHost, quotePort, loginAuth);
+		} catch (Exception e) {
+			logger.error(" 行情登陆失败:"+e.getMessage());	
+			requestStop = true;
+		}
 		logger.info("行情地址:" + quoteHost + ":" + quotePort + " ... ");
 		
 		// ShutdownHook
