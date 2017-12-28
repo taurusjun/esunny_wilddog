@@ -48,14 +48,13 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				int queueLength = 0;
 				TapAPIQuoteWhole quote = null;
-				quote = marketDataQueue.poll();
+				try {
+					quote = marketDataQueue.poll(5L, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {					
+					logger.error(e.toString());
+				}
 				queueLength = marketDataQueue.size();
-				if (quote == null)
-				{
-					try {
-						Thread.sleep(100);
-					} catch (InterruptedException e) {
-					}
+				if (quote == null) {
 					continue;
 				}
 				try {
@@ -204,16 +203,14 @@ public class MarketDataSaver {
 			while (!requestStop) {
 				
 				TapAPIQuoteWhole quote = null;
-				quote = marketDataQueueCalc.poll();
+				try {
+					quote = marketDataQueueCalc.poll(1L, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {					// TODO Auto-generated catch block
+					logger.error(e.toString());
+				}
 				
 				if (quote == null)
-				{
-					try {
-						Thread.sleep(50);
-					} catch (InterruptedException e) {
-					}
 					continue;
-				}
 				
 				String contractUID = quote.Contract.Commodity.ExchangeNo + "." + quote.Contract.Commodity.CommodityNo
 						+ "." + quote.Contract.ContractNo1;
