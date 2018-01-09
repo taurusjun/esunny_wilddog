@@ -115,7 +115,7 @@ public class Contract {
 		}
 	}
 
-//	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked")
 	// 反序列化分钟K线
 	void deserializeMinKLines(File dataDir, String filename) {
 		try {
